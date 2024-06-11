@@ -5,9 +5,9 @@ import requests
 from bs4 import BeautifulSoup
 
 def get_git_commit_info(repo, branch, begin_time, end_time):
-    results = []
+    commits = []
     commit_list = []
-    merge_date_lsit = []
+    latest_commits = {}
     data = {
         # http://192.168.114.118/td/code_commit/list
         "repo" : repo,
@@ -22,24 +22,28 @@ def get_git_commit_info(repo, branch, begin_time, end_time):
         commit = {}
         for td in tr.select('td'):
             commit[td['name']] = td.get_text()
-        results.insert(0, commit)
-    for commit in results:
-        # commit_list.append(commit['short_id'])    
-        commit_id = commit['short_id']
-        # oss_url="https://oss.mthreads.com"
-        # if repo == 'gr-umd':
-        #     umd_url=f"{oss_url}/release-ci/gr-umd/{branch}/{commit_id}_{arch}-mtgpu_linux-xorg-release-hw{glvnd}.tar.gz"
-        commit_list.append(commit['short_id']) 
-        
-        # UMD list 修改， 因为umd可能有重复的commit，两笔commit可能是同一笔，当是同一笔commit时，只有最后一笔才有umd tar包； 
-        # 如果相邻两笔commit merge时间相同，则只取后一笔
-        if repo == 'gr-umd':
-            if commit['date'] not in merge_date_lsit:
-                merge_date_lsit.append(commit['date'])
-                commit_list.append(commit['short_id']) 
-    return commit_list
+        commits.insert(0, commit)
+    # for commit in commits:
+    #     # UMD list 修改， 因为umd可能有重复的commit，两笔commit可能是同一笔，当是同一笔commit时，只有最后一笔才有umd tar包； 
+    #     # 如果相邻两笔commit merge时间相同，则只取后一笔
+
+    #     commit_time = commit['commit_time']
+    #     commit_id = commit['commit_id']
+    #     if commit_time not in latest_commits or  latest_commits[commit_time]['commit_id'] < commit['commit_id']:
+    #         latest_commits[commit_time] = commit
+    # commit_list = [commit['short_id'] for commit in latest_commits.values()]
+    latest_commits = {}
+
+    for commit in commits:
+        commit_time = commit['commit_time']
+        # if commit_time not in latest_commits or  commit['commit_time'] in latest_commits:
+        latest_commits[commit_time] = commit
+
+    result_commit_ids = [commit['short_id'] for commit in latest_commits.values()]
+
+    return result_commit_ids
 
 if __name__ == "__main__":
-    print(get_git_commit_info("gr-kmd", "develop", "2024-02-29 00:00:00", "2024-03-01 00:00:00"))
+    print(get_git_commit_info("gr-umd", "develop", "2024-05-27 12:00:00", "2024-05-29 23:00:00"))
 
 

@@ -4,7 +4,6 @@ import os,sys,time,re
 from get_deb_version import get_deb_version
 import subprocess
 import get_commit
-import umd_fallback
 from datetime import datetime
 from sshClient import sshClient
 from logManager import logManager
@@ -74,7 +73,6 @@ def wget_url(ssh_client,url,destination_folder,file_name=None):
         return True
 
 def install_deb(driver_version,Pc):
-    # swqa_ssh_login_cmd = f"sshpass -p gfx123456 ssh swqa@{Test_Host_IP} -o StrictHostKeyChecking=no"
     log = logManager('ssh')
     rs = get_Pc_info(Pc)
     glvnd,os_type,arch = rs['glvnd'],rs['os_type'],rs['arch']
@@ -102,7 +100,7 @@ def install_deb(driver_version,Pc):
 
     # check driver status after reboot 
     # print('=='*10 +  f"sudo dpkg -i {driver_name} && sudo reboot" + '=='*10)
-    Test_Host_IP = '192.168.114.8'
+    # Test_Host_IP = '192.168.114.8'
     log.logger.info(f"等待远程主机 {Test_Host_IP} 重启...")
     time.sleep(150)
     if ping_host(Test_Host_IP):

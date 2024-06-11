@@ -54,16 +54,6 @@ import re
 
 """
 
-def get_deb_section(branch, begin_time,end_time):
-    result = []
-    return result
-
-# 根据deb version拿到umd、kmd区间
-
-# branch = 'develop'
-# driver_dic = {'musa_2024.03.26-D+10129': 'https://oss.mthreads.com/release-ci/repo_tags/20240326.txt', 'musa_2024.03.27-D+10151': 'https://oss.mthreads.com/release-ci/repo_tags/20240326.txt'}
-
-
 
 def slice_full_list(start_end_list, full_list):
     if start_end_list[0] in full_list:
@@ -117,20 +107,22 @@ def get_commit_from_deb(deb_rs_list,driver_full_list):
             repo_tag_dict = eval(rs[0].decode())
             gr_umd_start_end.append(repo_tag_dict['gr-umd'][branch])
             gr_kmd_start_end.append(repo_tag_dict['gr-kmd'][branch])
+    print(f"gr_umd_start_end = {gr_umd_start_end}\ngr_kmd_start_end = {gr_kmd_start_end}")
     begin_date = re.search(r"\d{4}.\d{2}.\d{2}",deb_rs_list[0])
     begin_date = begin_date.group()
     end_date = re.search(r"\d{4}.\d{2}.\d{2}",deb_rs_list[1])
     end_date = end_date.group()
-    previous_day = datetime.strptime(begin_date,"%Y%m%d") - timedelta(days=1)
+    previous_day = datetime.strptime(begin_date,"%Y.%m.%d") - timedelta(days=1)
     # 设置开始时间为前一天12:00，结束时间为当天的23:00
     previous_day_at_noon = previous_day.replace(hour=12, minute=0, second=0)
-    end_date = datetime.strptime(end_date,"%Y%m%d").replace(hour=23,minute=0,second=0)
+    end_date = datetime.strptime(end_date,"%Y.%m.%d").replace(hour=23,minute=0,second=0)
     # 格式化输出
     commit_begin_date = previous_day_at_noon.strftime("%Y-%m-%d %H:%M:%S")
     commit_end_date = end_date.strftime("%Y-%m-%d %H:%M:%S")
-    # print(f"查询开始时间：{commit_begin_date}\n查询结束时间：{commit_end_date}")    
+    print(f"查询开始时间：{commit_begin_date}\n查询结束时间：{commit_end_date}")    
     umd_list = get_commit.get_git_commit_info("gr-umd", branch, commit_begin_date , commit_end_date)
     kmd_list = get_commit.get_git_commit_info("gr-kmd", branch, commit_begin_date , commit_end_date)
+    print(f"umd_list:{umd_list}\nkmd_list:{kmd_list}")
     umd_search_list = slice_full_list(gr_umd_start_end,umd_list)
     kmd_search_list = slice_full_list(gr_kmd_start_end,kmd_list)
     print(f"umd_list：{umd_search_list}\nkmd_list：{kmd_search_list}")
@@ -148,18 +140,28 @@ def kmd_fallback(kmd_search_list,Pc):
     kmd_rs_list = middle_search('gr-kmd',kmd_search_list,Pc)
     return kmd_rs_list
 
-branch = sys.argv[1]
-begin_date = sys.argv[2]
-end_date = sys.argv[3]
-os_type = sys.argv[4] # pc合一包？os单独？
+# branch = sys.argv[1]
+# begin_date = sys.argv[2]
+# end_date = sys.argv[3]
+# os_type = sys.argv[4] # pc合一包？os单独？
+begin_date = '20240528'
+end_date = '20240601'
+branch = 'develop'
+Test_Host_IP = '192.168.114.8'
 if __name__ == "__main__":
-    begin_date = '20240527'
-    end_date = '20240529'
+    begin_date = '20240528'
+    end_date = '20240601'
     branch = 'develop'
     Test_Host_IP = '192.168.114.8'
-    Pc = sshClient(Test_Host_IP,"georgy","dell1234")
-    main(branch,begin_date,end_date,Pc)
-
+    Host_name = 'swqa'
+    passwd = 'gfx123456'
+    Pc = sshClient(Test_Host_IP,Host_name,passwd)
+    # main(branch,begin_date,end_date,Pc)
+    umd_search_list = []
+    # umd_fallback(umd_search_list,Pc)
+    deb_rs_list = ['musa_2024.05.28-D+11235','musa_2024.05.29-D+11244']
+    driver_full_list = get_deb_version(branch,begin_date, end_date) 
+    print(get_commit_from_deb(deb_rs_list,driver_full_list))
 
 
 

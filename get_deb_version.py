@@ -20,7 +20,7 @@ def deal(begin_date, end_date):
         i = datetime.datetime.strptime(i,"%Y%m%d")
         if i.weekday() < 5 :
             work_date_list.append(i.strftime("%Y%m%d"))
-    print(work_date_list)
+    # print(work_date_list)
     return work_date_list
 
 def get_deb_version(branch,begin_date,end_date):
@@ -29,8 +29,6 @@ def get_deb_version(branch,begin_date,end_date):
     
     for work_date in work_date_list:
         rs = subprocess.Popen(f"curl https://oss.mthreads.com/product-release/{branch}/{work_date}/daily_build.txt", shell=True, close_fds=True, stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.PIPE, preexec_fn = os.setsid).communicate()
-        # output = subprocess.Popen(f"curl https://oss.mthreads.com/product-release/{branch}/{work_date}/daily_build.txt",stdout=subprocess.PIPE,shell=True).communicate()
-        # print(rs[0])
         rs =  rs[0].decode().strip()
         out_list = rs.splitlines()
         # result[work_date] = []
@@ -42,12 +40,13 @@ def get_deb_version(branch,begin_date,end_date):
     #     driver_url = f"https://oss.mthreads.com/product-release/{branch}/{work_date}/{driver_name}"
     #     result[work_date].append(driver_url)
     #     result[work_date].append(driver_name)
-    print(result)
+    # print(result)
     return result
 
 
 
 if __name__ == '__main__':
-    driver_dic = get_deb_version('develop','20240326', '20240327')
+    driver_full_list = get_deb_version('develop','20240528', '20240601')
     Test_Host_IP = "192.168.114.55"
     # install_driver(driver_dic,Test_Host_IP)
+    print(driver_full_list)
