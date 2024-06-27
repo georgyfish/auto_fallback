@@ -42,9 +42,10 @@ class sshClient():
         self.log.logger.info(f"Result: \n{result}")
         # print(f"stderr={stderr},type={type(stderr)}")
         # print(f"stderr={stderr.read()},type={type(stderr.read())}")
+        error=stderr.read().decode()
         # if  stderr.read().decode() != '' and stderr.read().decode() != None:
-        if  stderr:
-            error=stderr.read().decode()
+        if  error:
+            self.log.logger.error(f"执行如下命令出错:{command}")
             self.log.logger.warning(error.strip())
         return result   # .replace("\n", " ").strip().split(" ")
 
@@ -54,13 +55,13 @@ class sshClient():
 
 if __name__ == '__main__':
     # Pc = sshClient("192.168.114.8","swqa","gfx123456")
-    Pc = sshClient("192.168.220.128","georgy","dell1234")
+    Pc = sshClient("192.168.114.102","swqa","gfx123456")
     if 1000 == Pc.login():
-        # result = Pc.execute("wget https://oss.mthreads.com/product-release/develop/20240529/musa_2024.05.29-D+11244+dkms+glvnd-Ubuntu_amd64.deb -O 1.deb")
-        result = Pc.execute("sudo apt install ~/youdao-dict_6.0.0-ubuntu-amd64.deb && echo 'install pass' || echo 'install fail'")
+        result = Pc.execute("uname -m")
+        # result = Pc.execute("sudo apt install ~/youdao-dict_6.0.0-ubuntu-amd64.deb && echo 'install pass' || echo 'install fail'")
         # result = Pc.execute("DEBIAN_FRONTEND=noninteractive sudo apt install vainfo -y")
         # print(type(Pc))
-        print(f"result={result},type={type(result)}")
+        print(f"{result=},{type(result)=}")
         # for line in result.splitlines():
         #     if "Version: " in line:
         #         deb_version = line.split("Version: ")[-1]
