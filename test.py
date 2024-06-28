@@ -76,35 +76,6 @@ def slice_full_list(start_end_list, full_list):
         sys.exit(-1)        
     return full_list[index_start:index_end+1]
 
-def main(branch,begin_date,end_date,Pc):
-    driver_full_list = get_deb_version(branch,begin_date, end_date) 
-    driver_list = []
-    for driver in driver_full_list:
-        driver_version = driver[0]
-        driver_list.append(driver_version)
-    # print(driver_list)
-    deb_rs_list = deb_fallback(driver_list,Pc)
-    # deb_rs_list = ['musa_2024.05.28-D+11235', 'musa_2024.05.29-D+11244']
-    if not deb_rs_list:
-        print("此deb区间无法确定到问题引入范围")
-        sys.exit(-1)
-
-    umd_search_list, kmd_search_list = get_commit_from_deb(deb_rs_list,driver_full_list)
-        # {'mthreads-gmi': {'develop': '775306fcc', 'master': 'b55a66c9d'}, 'mt-media-driver': {'develop': '2a48bb594'}, 'mt-pes': {'master': 'ff3b990ba'}, 'gr-kmd': {'develop': 'cfb671a2d',\
-        #  'release-2.5.0-OEM': '6e65e6285'}, 'graphics-compiler': {'master': '6bfb47527'}, 'm3d': {'master': 'fad16f82a'}, 'vbios': {'master': '79c044773'}, 'ogl': {'master': '757a3724b'}, \
-        # 'd3dtests': {'master': 'a88614bcc'}, 'gr-umd': {'develop': 'da0c850b8', 'release-2.5.0-OEM': '3d2e327ca'}, 'wddm': {'develop': '11ba5447c'}}
- 
-    umd_rs_list = middle_search('gr-umd',umd_search_list,Pc)
-    if not umd_rs_list:
-        print("此UMD区间无法确定到问题引入范围")
-        # sys.exit(-1)
-        kmd_rs_list = middle_search('gr-kmd',kmd_search_list,Pc)
-        if not kmd_rs_list:
-            print("此KMD区间无法确定到问题引入范围")
-            sys.exit(-1)
-
-    umd_fallback(umd_search_list,Pc)
-
 
 def get_commit_from_deb(deb_rs_list,driver_full_list):
     gr_umd_start_end = []
@@ -148,11 +119,6 @@ def kmd_fallback(kmd_search_list,Pc):
     kmd_rs_list = middle_search('gr-kmd',kmd_search_list,Pc)
     return kmd_rs_list
 
-
-# driver_dic = {'20240326': ['musa_2024.03.26-D+10129', 'https://oss.mthreads.com/release-ci/repo_tags/20240326.txt', 'https://oss.mthreads.com/product-release/develop/20240326/musa_2024.03.26-D+10129+dkms+glvnd-Ubuntu_amd64.deb', 'musa_2024.03.26-D+10129+dkms+glvnd-Ubuntu_amd64.deb'], '20240327': ['musa_2024.03.27-D+10151', 'https://oss.mthreads.com/release-ci/repo_tags/20240327.txt', 'https://oss.mthreads.com/product-release/develop/20240327/musa_2024.03.27-D+10151+dkms+glvnd-Ubuntu_amd64.deb', 'musa_2024.03.27-D+10151+dkms+glvnd-Ubuntu_amd64.deb']}
-# lis1 = ["commit0","commit1","commit2","commit3","commit4","commit5","commit6","commit7","commit8","commit9","commit10","commit11","commit12"]
-# dic1 = {"commit0":"true","commit1":"true","commit2":"true","commit3":"true","commit4":"true","commit5":"true","commit6":"true","commit7":"true","commit8":"true","commit9":"true","commit10":"true","commit11":"true","commit12":"true"}fd
-
 def get_Pc_info(Pc):
     VALID_OS_TYPE = {"Kylin", "Ubuntu", "uos"}
     VALID_OS_ARCH_MAP = {"x86_64": "amd64", "aarch64": "arm64", "loongarch64": "loongarch64"}
@@ -168,6 +134,7 @@ def get_Pc_info(Pc):
     # "umd_version" : "export DISPLAY=:0.0 && glxinfo -B |grep -i 'OpenGL version string'|awk '{print $NF}'|awk -F '@' '{print $1}'" ,
     # "kmd_version" : "sudo grep 'Driver Version' /sys/kernel/debug/musa/version|awk -F[ '{print $NF}'|awk -F] '{print $1}'",
     # "glvnd" : ""
+    # "user" : ""
     }
     for key,command in commands.items():
         result[key] = Pc.execute(command)[0]
@@ -211,15 +178,6 @@ def wget_url(client,url,destination_folder,file_name=None):
         log.logger.info(f"package {file_name} 下载成功。")
         return True
 
-def test_ssh():
-    work_date='20240624'
-    driver_name='musa_2024.06.24-D+11561+dkms+glvnd-Ubuntu_amd64.deb'
-    driver_url = f"https://oss.mthreads.com/product-release/{branch}/{work_date}/{driver_name}"
-    destination_folder = "/home/swqa/deb_fallback"
-    # rs = wget_url(Pc,driver_url,destination_folder)
-    s = Pc.execute(f"uname -m")
-    return s
-    # Pc.logout()
 
 def install_deb(driver_version,Pc):
     log.logger.info('=='*10 + f"Installing  driver {driver_version}" + '=='*10)
@@ -282,14 +240,14 @@ def install_umd(commit,Pc):
         Pc.execute(f"cd {destination_folder}/{commit}_UMD/${arch}-mtgpu_linux-xorg-release/ && sudo ./install.sh -u . && sudo ./install.sh -s .")
     rs = Pc.execute("[ -f /etc/ld.so.conf.d/00-mtgpu.conf ] && echo yes  || echo no")[0]
     if rs == 'no' :
-        Pc.execute("echo -e '/usr/lib/$(uname -m)-linux-gnu/musa' |sudo tee /etc/ld.so.conf.d/00-mtgpu.conf")
+        Pc.execute("echo -e /usr/lib/$(uname -m)-linux-gnu/musa |sudo tee /etc/ld.so.conf.d/00-mtgpu.conf")
         if Pc.execute("uname -m")[0] == "aarch64":
             Pc.execute("echo -e '/usr/lib/arm-linux-gnueabihf/musa' |sudo tee -a /etc/ld.so.conf.d/00-mtgpu.conf")
     Pc.execute(f"sudo ldconfig && sudo systemctl restart {dm_type}")
     
     # check umd version
     time.sleep(10)
-    Umd_Version = Pc.execute("export DISPLAY=:0.0 && glxinfo -B |grep -i 'OpenGL version string'|awk '{print $NF}'|awk -F '@' '{print $1}'")[0]
+    Umd_Version = Pc.execute("export DISPLAY=:0.0 && glxinfo -B |grep -i 'OpenGL version string'|grep -oP '\\b[0-9a-f]{9}\\b(?=@)'")[0]
     if Umd_Version == commit:
         log.logger.info(f"安装成功，版本号为 {Umd_Version}")
         log.logger.info('=='*10 + f"Install UMD commit {commit} Complete" + '=='*10)
@@ -361,9 +319,6 @@ def install_kmd(commit,Pc):
             log.logger.error(f"kmd no load present !!!")
             return False
 
-    # "${oss_url}/sw-build/gr-kmd/${branch}/${commitID}/${commitID}_${arch}-mtgpu_linux-xorg-release-hw.tar.gz"
-    # "${oss_url}/sw-build/gr-kmd/${branch}/${commitID}/${commitID}_${arch}-mtgpu_linux-xorg-release-hw.deb"
-
 def install_driver(repo,driver_version,Pc):
     if repo == 'deb':
         rs = install_deb(driver_version,Pc)
@@ -371,9 +326,7 @@ def install_driver(repo,driver_version,Pc):
         rs =install_umd(driver_version,Pc)
     elif repo == 'gr-kmd':
         rs = install_kmd(driver_version,Pc)
-
     test_result = ''
-    # 假如安装失败了，需要怎么做？中断？还是继续寻找回退
     if not rs:
         test_result = 'fail'
         return test_result
@@ -386,7 +339,7 @@ def testcase():
     rs = input("请输入测试结果：pass/fail\n")
     return rs
 
-# 二分查找，需要一个有序的数据类型，
+# 二分查找
 def middle_search(repo,middle_search_list,Pc):
     # left、right初始值为列表元素的序号index 最小值和最大值
     left = 0 
@@ -395,7 +348,7 @@ def middle_search(repo,middle_search_list,Pc):
     left_value = install_driver(repo,middle_search_list[left],Pc)
     right_value = install_driver(repo,middle_search_list[right],Pc)
     if left_value == right_value:
-        print("此区间内，第一个元素和最后一个元素的结果相等，请确认区间范围")
+        log.logger.info("此区间内，第一个元素和最后一个元素的结果相等，请确认区间范围")
         return None               
     while left <= right -2 :
         middle = (left + right )//2 
@@ -405,39 +358,68 @@ def middle_search(repo,middle_search_list,Pc):
             left = middle 
         elif mid_value != None and mid_value == right_value:
             right = middle 
-    print(f"使用二分法{count}次确认\n\n定位到问题引入范围是 {middle_search_list[left]}(不发生)-{middle_search_list[right]}(发生)之间引入") 
+    log.logger.info(f"使用二分法{count}次确认\n\n定位到问题引入范围是 {middle_search_list[left]}(不发生)-{middle_search_list[right]}(发生)之间引入") 
     return middle_search_list[left:right]
 
 # global branch 
 # branch = test.branch
-branch = 'develop'
-begin_date = '20240620'
-end_date = '20240624'
-branch = 'develop'
-Test_Host_IP = '192.168.114.102'
-Host_name = 'swqa'
-passwd = 'gfx123456'
-log = logManager('test')
-Pc = sshClient.sshClient(Test_Host_IP,Host_name,passwd)
-if 1000 == Pc.login():
-    # test_ssh()
-    rs = get_Pc_info(Pc)
-    print(f"{rs=}")
-    glvnd,os_type,arch,architecture,dm_type,kernel_version = rs['glvnd'],rs['os_type'],rs['arch'],rs['architecture'],rs['dm_type'],rs['kernel_version']
-    # driver_full_list = get_deb_version(branch,begin_date, end_date) 
-    # print(f"{driver_full_list=}")
-    # driver_list = []
-    # for driver in driver_full_list:
-    #     driver_version = driver[0]
-    #     driver_list.append(driver_version)
-    # print(f"{driver_list=}")
-    # deb_rs_list = deb_fallback(driver_list,Pc)
-    # print(f"{deb_rs_list=}")
+
+
+def main(branch,begin_date,end_date,Pc):
+    driver_full_list = get_deb_version(branch,begin_date, end_date) 
+    driver_list = []
+    for driver in driver_full_list:
+        driver_version = driver[0]
+        driver_list.append(driver_version)
+    # print(driver_list)
+    deb_rs_list = deb_fallback(driver_list,Pc)
     # deb_rs_list = ['musa_2024.05.28-D+11235', 'musa_2024.05.29-D+11244']
+    if not deb_rs_list:
+        print("此deb区间无法确定到问题引入范围")
+        sys.exit(-1)
 
-    install_kmd('7a52195ed',Pc)
+    umd_search_list, kmd_search_list = get_commit_from_deb(deb_rs_list,driver_full_list)
+        # {'mthreads-gmi': {'develop': '775306fcc', 'master': 'b55a66c9d'}, 'mt-media-driver': {'develop': '2a48bb594'}, 'mt-pes': {'master': 'ff3b990ba'}, 'gr-kmd': {'develop': 'cfb671a2d',\
+        #  'release-2.5.0-OEM': '6e65e6285'}, 'graphics-compiler': {'master': '6bfb47527'}, 'm3d': {'master': 'fad16f82a'}, 'vbios': {'master': '79c044773'}, 'ogl': {'master': '757a3724b'}, \
+        # 'd3dtests': {'master': 'a88614bcc'}, 'gr-umd': {'develop': 'da0c850b8', 'release-2.5.0-OEM': '3d2e327ca'}, 'wddm': {'develop': '11ba5447c'}}
+ 
+    umd_rs_list = middle_search('gr-umd',umd_search_list,Pc)
+    if not umd_rs_list:
+        print("此UMD区间无法确定到问题引入范围")
+        # sys.exit(-1)
+        kmd_rs_list = middle_search('gr-kmd',kmd_search_list,Pc)
+        if not kmd_rs_list:
+            print("此KMD区间无法确定到问题引入范围")
+            sys.exit(-1)
 
+    umd_fallback(umd_search_list,Pc)
 
-
-
-
+if __name__ == "__main__":
+    branch = 'develop'
+    begin_date = '20240620'
+    end_date = '20240624'
+    branch = 'develop'
+    Test_Host_IP = '192.168.114.102'
+    Host_name = 'swqa'
+    passwd = 'gfx123456'
+    log = logManager('Install')
+    Pc = sshClient.sshClient(Test_Host_IP,Host_name,passwd)
+    if 1000 == Pc.login():
+        # test_ssh()
+        rs = get_Pc_info(Pc)
+        print(f"{rs=}")
+        glvnd,os_type,arch,architecture,dm_type,kernel_version = rs['glvnd'],rs['os_type'],rs['arch'],rs['architecture'],rs['dm_type'],rs['kernel_version']
+        # driver_full_list = get_deb_version(branch,begin_date, end_date) 
+        # print(f"{driver_full_list=}")
+        # driver_list = []
+        # for driver in driver_full_list:
+        #     driver_version = driver[0]
+        #     driver_list.append(driver_version)
+        # print(f"{driver_list=}")
+        # deb_rs_list = deb_fallback(driver_list,Pc)
+        # print(f"{deb_rs_list=}")
+        # deb_rs_list = ['musa_2024.05.28-D+11235', 'musa_2024.05.29-D+11244']
+        # install_umd('4b3b7068f',Pc)
+        # install_kmd('7a52195ed',Pc)
+        # umd_search_list = ['5efbca234', '4b3b7068f', 'fb15a8f46', '08cd254f3', 'b47553c08', 'de9c3e598']
+        # umd_fallback(umd_search_list,Pc)
