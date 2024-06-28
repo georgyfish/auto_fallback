@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 
-import paramiko,logging,sys
+import paramiko,logging,sys,time
 from paramiko import AuthenticationException
-from paramiko.ssh_exception import NoValidConnectionsError
 from logManager import logManager
+from paramiko.ssh_exception import SSHException, NoValidConnectionsError
 
 class sshClient():
 
     def __init__(self, hostname, username, password, port=22):
         self.client = paramiko.SSHClient()
+        # self.client = None
         self.log = logManager('ssh')
         self.host = hostname       #连接的目标主机
         self.port = port      #指定端口
@@ -16,8 +17,9 @@ class sshClient():
         self.passwd = password      #验证的用户密码
 
     def login(self, timeout=10):
-        self.log.logger.info(f"Connect to '{self.user}@{self.host}/{self.port}' PassWd: {self.passwd}")
+        
         try:
+            self.log.logger.info(f"Connect to '{self.user}@{self.host}/{self.port}' PassWd: {self.passwd}")
             # 设置允许连接known_hosts文件中的主机（默认连接不在known_hosts文件中的主机会拒绝连接抛出SSHException）
             self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             self.client.connect(self.host, port=self.port, username=self.user, password=self.passwd, timeout=timeout)
@@ -32,38 +34,70 @@ class sshClient():
             self.log.logger.error(f"Unexpected error: {sys.exc_info()[0]}")
             return 1003
         return 1000
+    
+    def execute(self, command,timeout=10):
+        if not self.client:
+            self.login()
+        try:
+            if self.client:
+                self.log.logger.info(f'Execute "{command}"')
+                stdin, stdout, stderr = self.client.exec_command(command)
+                Output,Error= stdout.read().decode().strip('\n'), stderr.read().decode()
+                self.log.logger.info(f"Output: \n{Output}")
+                if Error:
+                    self.log.logger.error(f"执行如下命令出错:{command}")
+                    self.log.logger.error(f"Error: \n{Error}")
+                return  Output,Error
+        except SSHException as e:
+            self.log.logger.error(f"SSH command execution error: {e}")
+            self.login()
+            if self.client:
+                stdin, stdout, stderr = self.client.exec_command(command)
+                Output,Error= stdout.read().decode().strip('\n'), stderr.read().decode()
+                self.log.logger.info(f"Output: \n{Output}")
+                if Error:
+                    self.log.logger.error(f"执行如下命令出错:{command}")
+                    self.log.logger.error(f"Error: \n{Error}")
+                return  Output,Error
+        return None, None
+    
+    def close(self):
+        if self.client:
+            self.client.close()
+            self.log.logger.info(f"Close connect '{self.host}/{self.port}'")
 
-    def execute(self, command, timeout=10):
-        self.log.logger.info(f'Execute "{command}"')
-        result = ""
-        stdin, stdout, stderr = self.client.exec_command(command)
-        # stdout为缓冲区，数据都取之后清空
-        result = stdout.read().decode().strip('\n')
-        self.log.logger.info(f"Result: \n{result}")
-        # print(f"stderr={stderr},type={type(stderr)}")
-        # print(f"stderr={stderr.read()},type={type(stderr.read())}")
-        error=stderr.read().decode()
-        # if  stderr.read().decode() != '' and stderr.read().decode() != None:
-        if  error:
-            self.log.logger.error(f"执行如下命令出错:{command}")
-            self.log.logger.warning(error.strip())
-        return result   # .replace("\n", " ").strip().split(" ")
+    def reboot_and_reconnect(self, wait_time=60, retries=10):
+        self.log.logger.info(f"Rebooting the remote PC {self.host}...")
+        self.execute("sudo reboot")
+        self.close()
+        
+        for attempt in range(retries):
+            self.log.logger.info(f"Attempt {attempt + 1} to reconnect after reboot...")
+            time.sleep(wait_time)  # Wait for the server to reboot
+            
+            try:
+                self.login()
+                if self.client:
+                    self.log.logger.info("Reconnected successfully.")
+                    return True
+            except (SSHException, NoValidConnectionsError) as e:
+                self.log.logger.info(f"Reconnect attempt failed: {e}")
+        
+        self.log.logger.info("Failed to reconnect after reboot.")
+        return False
 
     def logout(self):
         self.log.logger.info(f"Close connect '{self.host}/{self.port}'")
-        self.client.close()
+        self.close()
 
 if __name__ == '__main__':
-    # Pc = sshClient("192.168.114.8","swqa","gfx123456")
     Pc = sshClient("192.168.114.102","swqa","gfx123456")
     if 1000 == Pc.login():
-        result = Pc.execute("uname -m")
-        # result = Pc.execute("sudo apt install ~/youdao-dict_6.0.0-ubuntu-amd64.deb && echo 'install pass' || echo 'install fail'")
-        # result = Pc.execute("DEBIAN_FRONTEND=noninteractive sudo apt install vainfo -y")
-        # print(type(Pc))
-        print(f"{result=},{type(result)=}")
-        # for line in result.splitlines():
-        #     if "Version: " in line:
-        #         deb_version = line.split("Version: ")[-1]
-        # print(deb_version)
-        Pc.logout()
+        # if Pc.reboot_and_reconnect(wait_time=30, retries=20):
+        #     rs = Pc.execute("dpkg -s musa")
+        #     # print("Output:", output)
+        #     # print("Error:", error)
+        #     print(f"{rs=},{type(rs)=}")
+        #     Pc.close()
+        Umd_Version = Pc.execute("export DISPLAY=:0.0 && glxinfo -B |grep -i 'OpenGL version string'|awk '{print $NF}'|awk -F '@' '{print $1}'")[0]
+        print(f"{Umd_Version=}")
