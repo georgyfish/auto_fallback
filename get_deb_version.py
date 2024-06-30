@@ -1,9 +1,8 @@
 #!/usr/bin/python3
 import os,sys,time
 import datetime
-import pandas as pd
 import subprocess
-
+from logManager import logManager
 
 def deal(begin_date, end_date):
     date_list = []
@@ -26,27 +25,42 @@ def deal(begin_date, end_date):
 def get_deb_version(branch,begin_date,end_date):
     result = []
     work_date_list = deal(begin_date, end_date)
-    
+    log = logManager('get_deb_version')
+    # error
     for work_date in work_date_list:
-        rs = subprocess.Popen(f"curl https://oss.mthreads.com/product-release/{branch}/{work_date}/daily_build.txt", shell=True, close_fds=True, stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.PIPE, preexec_fn = os.setsid).communicate()
-        rs =  rs[0].decode().strip()
-        out_list = rs.splitlines()
-        # result[work_date] = []
-        # print(out_list)
-        result.append(out_list)
-        # result[work_date].append(out_list[1]) 
-    # for work_date,driver_version in result.items():
-    #     driver_name = f"{driver_version[0]}+dkms+glvnd-Ubuntu_amd64.deb"
-    #     driver_url = f"https://oss.mthreads.com/product-release/{branch}/{work_date}/{driver_name}"
-    #     result[work_date].append(driver_url)
-    #     result[work_date].append(driver_name)
-    # print(result)
+        url = f"https://oss.mthreads.com/product-release/{branch}/{work_date}/daily_build.txt"
+        log.logger.info(f"curl {url}")
+        try:
+            rs = subprocess.run(['curl', url], capture_output=True, text=True, check=True)
+            stdout_list = rs.stdout.splitlines()
+            log.logger.info(f"{stdout_list=}")
+            result.append(stdout_list)
+        except subprocess.CalledProcessError as e:
+        # 打印错误信息
+            log.logger.error(f"Error:\n{e.stderr}")
+        except Exception as e:
+        # 处理其他异常
+            log.logger.error(f"An unexpected error occurred: {e}")
     return result
 
 
 
 if __name__ == '__main__':
     driver_full_list = get_deb_version('develop','20240528', '20240601')
-    Test_Host_IP = "192.168.114.55"
-    # install_driver(driver_dic,Test_Host_IP)
     print(driver_full_list)
+    # log = logManager('get_deb_version')
+    # result = []
+    # try:
+    #     rs = subprocess.run(['curl', "https://mirror.ghproxy.com/https://raw.githubusercontent.com/georgyfish/test_script/main/1.txt"], capture_output=True, text=True, check=True)
+    #     # print("Output:", rs.stdout)
+    #     stdout_list = rs.stdout.splitlines()
+    #     log.logger.info(f"{stdout_list=}")
+    #     result.append(stdout_list)
+    # except subprocess.CalledProcessError as e:
+    # # 打印错误信息
+    #     # print("Error:\n", e.stderr)
+    #     log.logger.error(f"Error:\n{e.stderr}")
+    # except Exception as e:
+    # # 处理其他异常
+    #     print(f"An unexpected error occurred: {e}")
+    # print(result)

@@ -1,19 +1,10 @@
 #!/usr/bin/python3
 from datetime import datetime, timezone, timedelta
-# import middle_search as ms
 from get_deb_version import get_deb_version
-import subprocess,os,sys,get_commit
+import subprocess,os,sys,get_commit,time,re
 import sshClient
 from logManager import logManager
-import re
-import os,sys,time,re
-from get_deb_version import get_deb_version
-import subprocess
-import get_commit
-from datetime import datetime
-# from sshClient import sshClient
-from logManager import logManager
-# import test
+
 
 # """
 # 确定发生一个回退问题----》大致版本区间---》根据
@@ -67,12 +58,12 @@ def slice_full_list(start_end_list, full_list):
     if start_end_list[0] in full_list:
         index_start = full_list.index(start_end_list[0])
     else:
-        print("input error!")
+        log.logger.error("input error!")
         sys.exit(-1)
     if start_end_list[1] in full_list:
         index_end = full_list.index(start_end_list[1])
     else:
-        print("input error!")
+        log.logger.error("input error!")
         sys.exit(-1)        
     return full_list[index_start:index_end+1]
 
@@ -82,41 +73,54 @@ def get_commit_from_deb(deb_rs_list,driver_full_list):
     gr_kmd_start_end = []
     for deb_info in driver_full_list:
         if deb_info[0] in deb_rs_list:
-            rs = subprocess.Popen(f"curl {deb_info[1]}", shell=True, close_fds=True, stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.PIPE).communicate()
-            repo_tag_dict = eval(rs[0].decode())
-            gr_umd_start_end.append(repo_tag_dict['gr-umd'][branch])
-            gr_kmd_start_end.append(repo_tag_dict['gr-kmd'][branch])
-    print(f"gr_umd_start_end = {gr_umd_start_end}\ngr_kmd_start_end = {gr_kmd_start_end}")
-    begin_date = re.search(r"\d{4}.\d{2}.\d{2}",deb_rs_list[0])
-    begin_date = begin_date.group()
-    end_date = re.search(r"\d{4}.\d{2}.\d{2}",deb_rs_list[1])
-    end_date = end_date.group()
+            # rs = subprocess.Popen(f"curl {deb_info[1]}", shell=True, close_fds=True, stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.PIPE).communicate()
+            log.logger.info(f"curl {deb_info[1]}")
+            try:
+                rs = subprocess.run(['curl', deb_info[1]], capture_output=True, text=True, check=True)
+                repo_tag_dict = eval(rs.stdout)
+                log.logger.info(f"{repo_tag_dict=}")
+                # result.append(stdout_list)
+                gr_umd_start_end.append(repo_tag_dict['gr-umd'][branch])
+                gr_kmd_start_end.append(repo_tag_dict['gr-kmd'][branch])
+            except subprocess.CalledProcessError as e:
+                log.logger.error(f"Error:\n{e.stderr}")
+            except Exception as e:
+                log.logger.error(f"An unexpected error occurred: \n{e}")
+    log.logger.info(f"{gr_umd_start_end=}\n{gr_kmd_start_end=}\n")
+    begin_date = re.search(r"\d{4}.\d{2}.\d{2}",deb_rs_list[0]).group()
+    end_date = re.search(r"\d{4}.\d{2}.\d{2}",deb_rs_list[1]).group()
     previous_day = datetime.strptime(begin_date,"%Y.%m.%d") - timedelta(days=1)
     # 设置开始时间为前一天12:00，结束时间为当天的23:00
-    previous_day_at_noon = previous_day.replace(hour=12, minute=0, second=0)
-    end_date = datetime.strptime(end_date,"%Y.%m.%d").replace(hour=23,minute=0,second=0)
+    commit_begin_date = previous_day.replace(hour=12, minute=0, second=0).strftime("%Y-%m-%d %H:%M:%S")
+    commit_end_date = datetime.strptime(end_date,"%Y.%m.%d").replace(hour=23,minute=0,second=0).strftime("%Y-%m-%d %H:%M:%S")
     # 格式化输出
-    commit_begin_date = previous_day_at_noon.strftime("%Y-%m-%d %H:%M:%S")
-    commit_end_date = end_date.strftime("%Y-%m-%d %H:%M:%S")
-    print(f"查询开始时间：{commit_begin_date}\n查询结束时间：{commit_end_date}")    
+    log.logger.info(f"查询开始时间：{commit_begin_date}\n查询结束时间：{commit_end_date}\n")    
     umd_list = get_commit.get_git_commit_info("gr-umd", branch, commit_begin_date , commit_end_date)
     kmd_list = get_commit.get_git_commit_info("gr-kmd", branch, commit_begin_date , commit_end_date)
-    print(f"umd_list:{umd_list}\nkmd_list:{kmd_list}")
-    umd_search_list = slice_full_list(gr_umd_start_end,umd_list)
-    kmd_search_list = slice_full_list(gr_kmd_start_end,kmd_list)
-    print(f"umd_list：{umd_search_list}\nkmd_list：{kmd_search_list}")
+    log.logger.info(f"{umd_list=}\n{kmd_list=}\n")
+    umd_search_list , kmd_search_list = slice_full_list(gr_umd_start_end,umd_list) , slice_full_list(gr_kmd_start_end,kmd_list)
+    log.logger.info(f"{umd_search_list=}\n{kmd_search_list=}\n")
     return umd_search_list,kmd_search_list
 
 def deb_fallback(driver_list,Pc):
     deb_rs_list = middle_search('deb',driver_list,Pc)
+    if not deb_rs_list:
+        log.logger.error(f"{driver_list} deb区间无法确定问题引入范围")
+        sys.exit(-1)
     return deb_rs_list
 
 def umd_fallback(umd_search_list,Pc):
     umd_rs_list = middle_search('gr-umd',umd_search_list,Pc)
+    if not umd_rs_list:
+        log.logger.error(f"{umd_search_list} UMD区间无法确定问题引入范围")
+        # sys.exit(-1)
     return umd_rs_list
 
 def kmd_fallback(kmd_search_list,Pc):
     kmd_rs_list = middle_search('gr-kmd',kmd_search_list,Pc)
+    if not kmd_rs_list:
+        log.logger.error(f"{kmd_search_list} 此KMD区间无法确定问题引入范围")
+        sys.exit(-1)
     return kmd_rs_list
 
 def get_Pc_info(Pc):
@@ -142,8 +146,6 @@ def get_Pc_info(Pc):
     if result['arch'] == 'aarch64':
         result['arch'] = 'arm64'
     return result
-
-
 
 def ping_host(hostname, count=3, timeout=3, interval=5):
     """
@@ -171,13 +173,12 @@ def wget_url(client,url,destination_folder,file_name=None):
     client.execute(f"mkdir -p {destination_folder}")
     rs = client.execute(f"wget --no-check-certificate  {url} -O {destination} && echo 'True' ||echo 'False'")[0]
     if rs == 'False' :
-        print(f"download {url} failed !!!")
-        log.logger.error(f"package {file_name} 下载失败！！！")
+        log.logger.error(f"Download {url} failed !!!")
+        # log.logger.error(f"package {file_name} 下载失败！！！")
         return False
     else:
-        log.logger.info(f"package {file_name} 下载成功。")
+        log.logger.info(f"Download {url} success !!!")
         return True
-
 
 def install_deb(driver_version,Pc):
     log.logger.info('=='*10 + f"Installing  driver {driver_version}" + '=='*10)
@@ -218,7 +219,6 @@ def install_deb(driver_version,Pc):
             log.logger.error(f"包 {driver_name} 未安装成功。")
             return False
         
-
 def install_umd(commit,Pc):
     log.logger.info('=='*10 + f"Installing UMD commit {commit}" + '=='*10)
     destination_folder = "/home/swqa/UMD_fallback"
@@ -227,6 +227,7 @@ def install_umd(commit,Pc):
         UMD_commit_URL = f"http://oss.mthreads.com/release-ci/gr-umd/{branch}/{commit}_{arch}-mtgpu_linux-xorg-release-hw-{glvnd}.tar.gz"
         rs = wget_url(Pc,UMD_commit_URL,destination_folder,f"{commit}_UMD.tar.gz")
         if not rs:
+            
             return False
         Pc.execute(f"cd {destination_folder} && mkdir -p {destination_folder}/{commit}_UMD && tar -xvf  {commit}_UMD.tar.gz -C {destination_folder}/{commit}_UMD")
         Pc.execute(f"cd {destination_folder}/{commit}_UMD/{arch}-mtgpu_linux-xorg-release/ && sudo ./install.sh -g -n -u . && sudo ./install.sh -g -n -s .")
@@ -244,7 +245,6 @@ def install_umd(commit,Pc):
         if Pc.execute("uname -m")[0] == "aarch64":
             Pc.execute("echo -e '/usr/lib/arm-linux-gnueabihf/musa' |sudo tee -a /etc/ld.so.conf.d/00-mtgpu.conf")
     Pc.execute(f"sudo ldconfig && sudo systemctl restart {dm_type}")
-    
     # check umd version
     time.sleep(10)
     Umd_Version = Pc.execute("export DISPLAY=:0.0 && glxinfo -B |grep -i 'OpenGL version string'|grep -oP '\\b[0-9a-f]{9}\\b(?=@)'")[0]
@@ -274,7 +274,6 @@ def install_kmd(commit,Pc):
         rs = wget_url(Pc,KMD_commit_URL,destination_folder,f"{commit}_KMD.deb")
         if not rs:
             return False
-        
     # 安装dkms mtgpu.deb需要卸载musa ddk
     Pc.execute(f"sudo systemctl stop {dm_type}")
     time.sleep(10)
@@ -302,7 +301,6 @@ def install_kmd(commit,Pc):
     if rs[0] == 'yes':
         Pc.execute("echo -e 'options mtgpu display=mt EnableFWContextSwitch=27'  |sudo tee /etc/modprobe.d/mtgpu.conf")
     Pc.execute("sudo depmod -a && sudo update-initramfs -u -k `uname -r`")
-
     # reboot && check kmd version 
     if Pc.reboot_and_reconnect(wait_time=30, retries=20):
         rs = Pc.execute("lsmod |grep mtgpu")[0]
@@ -331,7 +329,6 @@ def install_driver(repo,driver_version,Pc):
         test_result = 'fail'
         return test_result
     else:
-        # 安装驱动后需手动测试，并输入测试结果：
         test_result = testcase()
         return test_result
 
@@ -344,11 +341,11 @@ def middle_search(repo,middle_search_list,Pc):
     # left、right初始值为列表元素的序号index 最小值和最大值
     left = 0 
     right = len(middle_search_list) - 1
-    count = 0
+    count = 2
     left_value = install_driver(repo,middle_search_list[left],Pc)
     right_value = install_driver(repo,middle_search_list[right],Pc)
     if left_value == right_value:
-        log.logger.info("此区间内，第一个元素和最后一个元素的结果相等，请确认区间范围")
+        log.logger.info(f"{middle_search_list}区间内第一个元素和最后一个的结果相同，请确认区间范围")
         return None               
     while left <= right -2 :
         middle = (left + right )//2 
@@ -358,57 +355,55 @@ def middle_search(repo,middle_search_list,Pc):
             left = middle 
         elif mid_value != None and mid_value == right_value:
             right = middle 
-    log.logger.info(f"使用二分法{count}次确认\n\n定位到问题引入范围是 {middle_search_list[left]}(不发生)-{middle_search_list[right]}(发生)之间引入") 
+    log.logger.info(f"总共{count}次查找\n\n定位到问题引入范围是：\"{middle_search_list[left]}\"(不发生)-\"{middle_search_list[right]}\"(发生)之间引入") 
     return middle_search_list[left:right]
-
-# global branch 
-# branch = test.branch
-
 
 def main(branch,begin_date,end_date,Pc):
     driver_full_list = get_deb_version(branch,begin_date, end_date) 
     driver_list = []
+    if not driver_full_list:
+        log.logger.error("Get driver_full_list is empty! Please check driver date!")
+        sys.exit(-1)
+    elif len(driver_full_list) == 1 :
+        log.logger.info(f"{len(driver_full_list)=} ; Please check driver date!")
     for driver in driver_full_list:
         driver_version = driver[0]
         driver_list.append(driver_version)
     # print(driver_list)
     deb_rs_list = deb_fallback(driver_list,Pc)
     # deb_rs_list = ['musa_2024.05.28-D+11235', 'musa_2024.05.29-D+11244']
-    if not deb_rs_list:
-        print("此deb区间无法确定到问题引入范围")
-        sys.exit(-1)
-
     umd_search_list, kmd_search_list = get_commit_from_deb(deb_rs_list,driver_full_list)
         # {'mthreads-gmi': {'develop': '775306fcc', 'master': 'b55a66c9d'}, 'mt-media-driver': {'develop': '2a48bb594'}, 'mt-pes': {'master': 'ff3b990ba'}, 'gr-kmd': {'develop': 'cfb671a2d',\
         #  'release-2.5.0-OEM': '6e65e6285'}, 'graphics-compiler': {'master': '6bfb47527'}, 'm3d': {'master': 'fad16f82a'}, 'vbios': {'master': '79c044773'}, 'ogl': {'master': '757a3724b'}, \
         # 'd3dtests': {'master': 'a88614bcc'}, 'gr-umd': {'develop': 'da0c850b8', 'release-2.5.0-OEM': '3d2e327ca'}, 'wddm': {'develop': '11ba5447c'}}
- 
-    umd_rs_list = middle_search('gr-umd',umd_search_list,Pc)
-    if not umd_rs_list:
-        print("此UMD区间无法确定到问题引入范围")
-        # sys.exit(-1)
-        kmd_rs_list = middle_search('gr-kmd',kmd_search_list,Pc)
-        if not kmd_rs_list:
-            print("此KMD区间无法确定到问题引入范围")
-            sys.exit(-1)
+    if not umd_fallback(umd_search_list,Pc): 
+        kmd_fallback(kmd_search_list,Pc)
+    # umd_rs_list = middle_search('gr-umd',umd_search_list,Pc)
+    # if not umd_rs_list:
+    #     print("此UMD区间无法确定到问题引入范围")
+    #     # sys.exit(-1)
+    #     kmd_rs_list = middle_search('gr-kmd',kmd_search_list,Pc)
+    #     if not kmd_rs_list:
+    #         print("此KMD区间无法确定到问题引入范围")
+    #         sys.exit(-1)
 
-    umd_fallback(umd_search_list,Pc)
+    # umd_fallback(umd_search_list,Pc)
 
 if __name__ == "__main__":
     branch = 'develop'
     begin_date = '20240620'
     end_date = '20240624'
-    branch = 'develop'
     Test_Host_IP = '192.168.114.102'
     Host_name = 'swqa'
     passwd = 'gfx123456'
-    log = logManager('Install')
+    log = logManager('Fallback Test')
     Pc = sshClient.sshClient(Test_Host_IP,Host_name,passwd)
     if 1000 == Pc.login():
         # test_ssh()
         rs = get_Pc_info(Pc)
         print(f"{rs=}")
         glvnd,os_type,arch,architecture,dm_type,kernel_version = rs['glvnd'],rs['os_type'],rs['arch'],rs['architecture'],rs['dm_type'],rs['kernel_version']
+        main(branch,begin_date,end_date,Pc)
         # driver_full_list = get_deb_version(branch,begin_date, end_date) 
         # print(f"{driver_full_list=}")
         # driver_list = []
