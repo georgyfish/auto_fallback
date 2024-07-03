@@ -23,15 +23,6 @@ def get_git_commit_info(repo, branch, begin_time, end_time):
         for td in tr.select('td'):
             commit[td['name']] = td.get_text()
         commits.insert(0, commit)
-    # for commit in commits:
-    #     # UMD list 修改， 因为umd可能有重复的commit，两笔commit可能是同一笔，当是同一笔commit时，只有最后一笔才有umd tar包； 
-    #     # 如果相邻两笔commit merge时间相同，则只取后一笔
-
-    #     commit_time = commit['commit_time']
-    #     commit_id = commit['commit_id']
-    #     if commit_time not in latest_commits or  latest_commits[commit_time]['commit_id'] < commit['commit_id']:
-    #         latest_commits[commit_time] = commit
-    # commit_list = [commit['short_id'] for commit in latest_commits.values()]
     latest_commits = {}
 
     for commit in commits:
@@ -44,6 +35,6 @@ def get_git_commit_info(repo, branch, begin_time, end_time):
     return result_commit_ids
 
 if __name__ == "__main__":
-    print(get_git_commit_info("gr-umd", "develop", "2024-05-27 12:00:00", "2024-05-29 23:00:00"))
+    print(get_git_commit_info("gr-umd", "develop", "2024-06-24 12:00:00", "2024-06-25 23:00:00"))
 
 

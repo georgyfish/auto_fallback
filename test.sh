@@ -231,7 +231,8 @@ function show_kmd_info() {
         then 
             echo "[INFO] $m loaded"
             # kmd_commit=$(grep "MTGPU Driver Version" /var/log/kern.log |tail -n 1 |awk -F: '{print $NF}' |awk '{print $1}')
-            kmd_commit=$(sudo grep "Driver Version" /sys/kernel/debug/musa/version|awk -F[ '{print $NF}'|awk -F] '{print $1}')
+            # kmd_commit=$(sudo grep "Driver Version" /sys/kernel/debug/musa/version|awk -F[ '{print $NF}'|awk -F] '{print $1}')
+            kmd_commit=$(modinfo $m |grep build_version |awk '{print $NF}')
             # kmd commit 只显示7位；检查安装成功时只能对比前7位字母数字；
             echo "[INFO] KMD commitID : $kmd_commit"
         else
@@ -357,12 +358,12 @@ function main() {
             fi
         fi
         net_check
-        echo "[INFO] sudo systemctl stop lightdm"
-        sudo systemctl stop lightdm
+        echo "[INFO] sudo systemctl stop $dm_type"
+        sudo systemctl stop $dm_type
         download_${component} $commitID
         install_${component} $commitID
-        echo "[INFO] sudo systemctl restart lightdm"
-        sudo systemctl restart lightdm
+        echo "[INFO] sudo systemctl start $dm_type"
+        sudo systemctl start $dm_type
     fi
     
     
@@ -379,7 +380,7 @@ glvnd="-glvnd"
 # if [ $os_type = "Kylin" ];then 
 #     glvnd=''
 # fi
- 
+dm_type=$(cat /etc/X11/default-display-manager |awk -F/ '{print $NF}') 
 main "$@"
 
 
