@@ -86,7 +86,8 @@ def check_umd_url(umd_search_list):
             )
             if result.returncode == 0:
                 rs.append(commit)
-                # return True
+            else:
+                log.logger.error(f"{url}地址不存在，移除UMD {commit}")
         except Exception as e:
             log.logger.error(f"An error occurred: {e}")
             # return False
@@ -104,7 +105,8 @@ def check_kmd_url(kmd_search_list):
             )
             if result.returncode == 0:
                 rs.append(commit)
-                # return True
+            else:
+                log.logger.error(f"{url}地址不存在，移除KMD {commit}")
         except Exception as e:
             log.logger.error(f"An error occurred: {e}")
             # return False
@@ -376,7 +378,7 @@ def install_driver(repo,driver_version,Pc):
         return test_result
 
 def testcase():
-    rs = input("请输入测试结果：pass/fail\n")
+    rs = input("请手动测试后输入测试结果：pass/fail\n")
     return rs
 
 # 二分查找
@@ -412,9 +414,9 @@ def main(branch,begin_date,end_date,Pc):
     for driver in driver_full_list:
         driver_version = driver[0]
         driver_list.append(driver_version)
-    # print(driver_list)
+    log.logger.info(f"{driver_list=}")
     deb_rs_list = deb_fallback(driver_list,Pc)
-    # deb_rs_list = ['musa_2024.05.28-D+11235', 'musa_2024.05.29-D+11244']
+    # deb_rs_list = ['musa_2024.07.01-D+11670', 'musa_2024.07.02-D+11693']
     umd_search_list, kmd_search_list = get_commit_from_deb(deb_rs_list,driver_full_list)
         # {'mthreads-gmi': {'develop': '775306fcc', 'master': 'b55a66c9d'}, 'mt-media-driver': {'develop': '2a48bb594'}, 'mt-pes': {'master': 'ff3b990ba'}, 'gr-kmd': {'develop': 'cfb671a2d',\
         #  'release-2.5.0-OEM': '6e65e6285'}, 'graphics-compiler': {'master': '6bfb47527'}, 'm3d': {'master': 'fad16f82a'}, 'vbios': {'master': '79c044773'}, 'ogl': {'master': '757a3724b'}, \
@@ -426,11 +428,8 @@ def main(branch,begin_date,end_date,Pc):
 
 if __name__ == "__main__":
     branch = 'develop'
-    begin_date = '20240624'
-    end_date = '20240628'
-    Test_Host_IP = '192.168.114.55'
-    begin_date = '20240624'
-    end_date = '20240628'
+    begin_date = '20240611'
+    end_date = '20240702'
     Test_Host_IP = '192.168.114.55'
     Host_name = 'swqa'
     passwd = 'gfx123456'
@@ -439,19 +438,27 @@ if __name__ == "__main__":
     if 1000 == Pc.login():
         rs = get_Pc_info(Pc)
         print(f"{rs=}")
-        glvnd,os_type,arch,architecture,dm_type,kernel_version = rs['glvnd'],rs['os_type'],rs['arch'],rs['architecture'],rs['dm_type'],rs['kernel_version']
-        # main(branch,begin_date,end_date,Pc)
-        driver_full_list = get_deb_version(branch,begin_date, end_date) 
-        print(f"{driver_full_list=}")
-        driver_list = []
-        for driver in driver_full_list:
-            driver_version = driver[0]
-            driver_list.append(driver_version)
-        print(f"{driver_list=}")
+        glvnd,os_type,arch,architecture,dm_type,kernel_version, exec_user= (
+            rs['glvnd'],
+            rs['os_type'],
+            rs['arch'],
+            rs['architecture'],
+            rs['dm_type'],
+            rs['kernel_version'],
+            rs['exec_user']
+        )
+        main(branch,begin_date,end_date,Pc)
+        # driver_full_list = get_deb_version(branch,begin_date, end_date) 
+        # print(f"{driver_full_list=}")
+        # driver_list = []
+        # for driver in driver_full_list:
+        #     driver_version = driver[0]
+        #     driver_list.append(driver_version)
+        # print(f"{driver_list=}")
         # deb_rs_list = deb_fallback(driver_list,Pc)
         # print(f"{deb_rs_list=}")
-        deb_rs_list = ['musa_2024.06.26-D+11625', 'musa_2024.06.27-D+11629']
-        umd_search_list, kmd_search_list = get_commit_from_deb(deb_rs_list,driver_full_list)
+        # deb_rs_list = ['musa_2024.07.01-D+11670', 'musa_2024.07.02-D+11693']
+        # umd_search_list, kmd_search_list = get_commit_from_deb(deb_rs_list,driver_full_list)
         # install_umd('4b3b7068f',Pc)
         # install_kmd('7a52195ed',Pc)
         # umd_search_list = ['5efbca234', '4b3b7068f', 'fb15a8f46', '08cd254f3', 'b47553c08', 'de9c3e598']
