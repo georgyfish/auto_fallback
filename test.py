@@ -181,7 +181,7 @@ def get_Pc_info(Pc):
     # "umd_version" : "export DISPLAY=:0.0 && glxinfo -B |grep -i 'OpenGL version string'|awk '{print $NF}'|awk -F '@' '{print $1}'" ,
     # "kmd_version" : "sudo grep 'Driver Version' /sys/kernel/debug/musa/version|awk -F[ '{print $NF}'|awk -F] '{print $1}'",
     # "glvnd" : ""
-    # "user" : ""
+    "exec_user" : "ps -ef |grep '/lib/systemd/systemd --user'|grep -v grep|awk -F' ' '{print $1}'|grep -vE 'lightdm|gdm'"
     }
     for key,command in commands.items():
         result[key] = Pc.execute(command)[0]
@@ -208,8 +208,6 @@ def ping_host(hostname, count=3, timeout=3, interval=5):
     return False
 
 def wget_url(client,url,destination_folder,file_name=None):
-    # ssh_client = sshClient("192.168.114.8","swqa","gfx123456")
-    
     if not file_name :
         file_name = url.split('/')[-1]
     destination = f"{destination_folder}/{file_name}"
@@ -232,7 +230,7 @@ def install_deb(driver_version,Pc):
     work_date = datetime.strftime(work_date, "%Y%m%d")
     driver_url = f"https://oss.mthreads.com/product-release/{branch}/{work_date}/{driver_name}"
     # if 1000 == Pc.login():
-    destination_folder = "/home/swqa/deb_fallback"
+    destination_folder = f"/home/{exec_user}/deb_fallback"
     rs = wget_url(Pc,driver_url,destination_folder)
     if not rs:
         return False
@@ -253,9 +251,11 @@ def install_deb(driver_version,Pc):
         driver_version = driver_version.split("musa_")[-1]
         if driver_version in deb_version:
             log.logger.info(f"driver安装成功，版本号为 {deb_version}")
+            log.logger.info(f"driver安装成功，版本号为 {deb_version}")
             log.logger.info('=='*10 + f"Install  driver {driver_version} Complete" + '=='*10)
             return True
         elif deb_version != '0' and driver_version not in deb_version:
+            log.logger.error(f"driver安装{driver_version}失败，版本号为 {deb_version}")
             log.logger.error(f"driver安装{driver_version}失败，版本号为 {deb_version}")
             return False
         else:
@@ -264,7 +264,7 @@ def install_deb(driver_version,Pc):
         
 def install_umd(commit,Pc):
     log.logger.info('=='*10 + f"Installing UMD commit {commit}" + '=='*10)
-    destination_folder = "/home/swqa/UMD_fallback"
+    destination_folder = f"/home/{exec_user}/UMD_fallback"
     # Pc.execute(f"mkdir {destination_folder}/{commit}_UMD && tar -xvf  {commit}_UMD.tar.gz -C {commit}_UMD")
     if glvnd == 'glvnd':
         UMD_commit_URL = f"http://oss.mthreads.com/release-ci/gr-umd/{branch}/{commit}_{arch}-mtgpu_linux-xorg-release-hw-{glvnd}.tar.gz"
@@ -304,7 +304,7 @@ def install_kmd(commit,Pc):
     log.logger.info('=='*10 + f"Installing KMD commit {commit}" + '=='*10)
     KMD_commit_URL = f"http://oss.mthreads.com/sw-build/gr-kmd/{branch}/{commit}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.tar.gz"
     # https://oss.mthreads.com/sw-build/gr-kmd/develop/7a52195ed/7a52195ed_x86_64-mtgpu_linux-xorg-release-hw.tar.gz
-    destination_folder = "/home/swqa/KMD_fallback"
+    destination_folder = f"/home/{exec_user}/KMD_fallback"
     rs = wget_url(Pc,KMD_commit_URL,destination_folder,f"{commit}_KMD.tar.gz")
     if not rs:
         return False
@@ -423,8 +423,12 @@ def main(branch,begin_date,end_date,Pc):
         kmd_fallback(kmd_search_list,Pc)
 
 
+
 if __name__ == "__main__":
     branch = 'develop'
+    begin_date = '20240624'
+    end_date = '20240628'
+    Test_Host_IP = '192.168.114.55'
     begin_date = '20240624'
     end_date = '20240628'
     Test_Host_IP = '192.168.114.55'
@@ -451,5 +455,6 @@ if __name__ == "__main__":
         # install_umd('4b3b7068f',Pc)
         # install_kmd('7a52195ed',Pc)
         # umd_search_list = ['5efbca234', '4b3b7068f', 'fb15a8f46', '08cd254f3', 'b47553c08', 'de9c3e598']
+        # umd_search_list = check_umd_url(umd_search_list)
         # umd_search_list = check_umd_url(umd_search_list)
         # umd_fallback(umd_search_list,Pc)
