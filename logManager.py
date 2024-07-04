@@ -7,16 +7,33 @@ from logging.handlers import TimedRotatingFileHandler
 # _baseHome = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _baseHome = os.path.dirname(os.path.abspath(__file__))
 
+
+class Colors:
+    GREEN = '\033[92m'
+    RED = '\033[91m'
+    RESET = '\033[0m'
+
+class CustomFormatter(logging.Formatter):
+
+    def format(self, record):
+        log_message = super().format(record)
+        # if record.levelno == logging.INFO:
+        #     return f"{Colors.GREEN}{log_message}{Colors.RESET}"
+        if record.levelno >= logging.WARNING:
+            return f"{Colors.RED}{log_message}{Colors.RESET}"
+        return log_message
+
 class logManager():
     # log_level没法直接用字符串，通过eval执行后，就变成logging定义的对象了
     log_level = eval("logging.DEBUG")
+    console_level = eval("logging.INFO")
     log_format = "%(asctime)s - %(name)s - %(filename)s[line:%(lineno)d] - %(levelname)s - %(message)s"
     log_path = "log"
-
     def __init__(self, name="main"):
         self.logger = logging.getLogger(name)
         self.logger.setLevel(level=self.log_level)
-        formatter = logging.Formatter(self.log_format)
+        # formatter = logging.Formatter(self.log_format)
+        formatter = CustomFormatter(self.log_format)
         # logging的TimedRotatingFileHandler方法提供滚动输出日志的功能
         _log_file = os.path.join(_baseHome, self.log_path, "log.txt")
         if not os.path.exists(_log_file):
@@ -30,12 +47,14 @@ class logManager():
         self.logger.addHandler(handler)
 
         console = logging.StreamHandler()
-        console.setLevel(self.log_level)
+        console.setLevel(self.console_level)
         console.setFormatter(formatter)
         self.logger.addHandler(console)
 
 if __name__ == "__main__":
     log = logManager()
     # logger = logging.getLogger('main')
-    log.logger.info('log test----------')
-    print(sys.builtin_module_names)
+    log.logger.warning('log test----------')
+    log.logger.info("This is an info message")
+    log.logger.error("This is an error message")
+    # print(sys.builtin_module_names)

@@ -93,6 +93,6 @@ class sshClient():
 if __name__ == '__main__':
     Pc = sshClient("192.168.114.102","swqa","gfx123456")
     if 1000 == Pc.login():
-        Umd_Version = Pc.execute("export DISPLAY=:0.0 && glxinfo -B |grep -i 'OpenGL version string'|grep -oP '\\b[0-9a-f]{9}\\b(?=@)'")[0]
+        Umd_Version = Pc.execute("export DISPLAY=:01.0 && glxinfo -B |grep -i 'OpenGL version string'|grep -oP '\\b[0-9a-f]{9}\\b(?=@)'")[0]
         print(f"{Umd_Version=}")
         # Pc.execute("echo -e /usr/lib/$(uname -m)-linux-gnu/musa |sudo tee /etc/ld.so.conf.d/00-mtgpu.conf")
