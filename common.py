@@ -1,12 +1,14 @@
 #!/usr/bin/python3
 
-import os,time,sys,subprocess,re
+import os,time,sys,subprocess,re, json
 import sshClient,get_commit
 from datetime import datetime, timezone, timedelta
-from get_deb_version import get_deb_version
 from logManager import logManager
 
 # common function
+# class common():
+#     log = logManager('common')
+log = logManager('common')
 
 def slice_full_list(start_end_list, full_list):
     try:
@@ -25,13 +27,21 @@ def slice_full_list(start_end_list, full_list):
         log.logger.error(f"list index out of range! {start_end_list} not in {full_list}")
         sys.exit(-1)
 
-
-def check_umd_url(umd_search_list,branch,commit,arch,glvnd):
+def check_url(repo,search_list,branch,arch,glvnd):
     rs = []
-    for commit in umd_search_list:
-        url = f"http://oss.mthreads.com/release-ci/gr-umd/{branch}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.tar.gz"
-        if glvnd:
-            url = f"http://oss.mthreads.com/release-ci/gr-umd/{branch}/{commit}_{arch}-mtgpu_linux-xorg-release-hw-{glvnd}.tar.gz"
+    for commit in search_list:
+        if repo == 'umd':
+            url = f"http://oss.mthreads.com/release-ci/gr-umd/{branch}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.tar.gz"
+            if glvnd:
+                url = f"http://oss.mthreads.com/release-ci/gr-umd/{branch}/{commit}_{arch}-mtgpu_linux-xorg-release-hw-{glvnd}.tar.gz"
+        elif repo == 'kmd':
+            url = f"http://oss.mthreads.com/sw-build/gr-kmd/{branch}/{commit}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.deb"
+        else:
+            work_date = re.search(r"\d{4}.\d{2}.\d{2}",commit)
+            work_date = work_date.group()
+            work_date = datetime.strptime(work_date, "%Y.%m.%d")
+            work_date = datetime.strftime(work_date, "%Y%m%d")
+            url = f"https://oss.mthreads.com/product-release/{branch}/{work_date}/{commit}"
         try:
             result = subprocess.run(
                 ['wget', '--spider', '-q', url], # --spider 表示不下载，只检查，-q 表示安静模式
@@ -41,33 +51,13 @@ def check_umd_url(umd_search_list,branch,commit,arch,glvnd):
             if result.returncode == 0:
                 rs.append(commit)
             else:
-                log.logger.error(f"{url}地址不存在，移除UMD {commit}")
+                log.logger.error(f"{url}地址不存在，移除{repo} {commit}")
         except Exception as e:
             log.logger.error(f"An error occurred: {e}")
             # return False
     return rs
 
-def check_kmd_url(kmd_search_list,branch,commit,arch):
-    rs = []
-    for commit in kmd_search_list:
-        url = f"http://oss.mthreads.com/sw-build/gr-kmd/{branch}/{commit}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.deb"
-        try:
-            result = subprocess.run(
-                ['wget', '--spider', '-q', url], # --spider 表示不下载，只检查，-q 表示安静模式
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
-            if result.returncode == 0:
-                print(f"{commit} 检查通过")
-                rs.append(commit)
-            else:
-                log.logger.error(f"{url}地址不存在，移除KMD {commit}")
-        except Exception as e:
-            log.logger.error(f"An error occurred: {e}")
-            # return False
-    return rs
-
-def get_commit_from_deb(deb_rs_list,driver_full_list,branch,commit,arch,glvnd):
+def get_commit_from_deb(deb_rs_list,driver_full_list,branch,arch,glvnd):
     gr_umd_start_end = []
     gr_kmd_start_end = []
     for deb_info in driver_full_list:
@@ -99,7 +89,7 @@ def get_commit_from_deb(deb_rs_list,driver_full_list,branch,commit,arch,glvnd):
     log.logger.info(f"{umd_list=}\n{kmd_list=}\n")
     umd_search_list , kmd_search_list = slice_full_list(gr_umd_start_end,umd_list) , slice_full_list(gr_kmd_start_end,kmd_list)
     log.logger.info(f"{umd_search_list=}\n{kmd_search_list=}\n")
-    umd_search_list,kmd_search_list = check_umd_url(umd_search_list,branch,commit,arch,glvnd),check_kmd_url(kmd_search_list,branch,commit,arch)
+    umd_search_list,kmd_search_list = check_url("umd",umd_search_list,branch,arch,glvnd),check_url("kmd",kmd_search_list,branch,arch)
     return umd_search_list,kmd_search_list
 
 def get_Pc_info(Pc):
@@ -169,11 +159,9 @@ def install_deb(driver_version,Pc,glvnd,os_type,arch,architecture,dm_type,kernel
         driver_version = driver_version.split("musa_")[-1]
         if driver_version in deb_version:
             log.logger.info(f"driver安装成功，版本号为 {deb_version}")
-            log.logger.info(f"driver安装成功，版本号为 {deb_version}")
             log.logger.info('=='*10 + f"Install  driver {driver_version} Complete" + '=='*10)
             return True
         elif deb_version != '0' and driver_version not in deb_version:
-            log.logger.error(f"driver安装{driver_version}失败，版本号为 {deb_version}")
             log.logger.error(f"driver安装{driver_version}失败，版本号为 {deb_version}")
             return False
         else:
@@ -325,6 +313,21 @@ def middle_search(repo,middle_search_list,Pc):
             right = middle 
     log.logger.info(f"总共{count}次查找\n\n定位到问题引入范围是：\"{middle_search_list[left]}\"(不发生)-\"{middle_search_list[right]}\"(发生)之间引入") 
     return middle_search_list[left:right]
+
+def get_default_dates():
+    today = datetime.today().strftime('%Y%m%d')
+    one_year_ago = (datetime.today() - timedelta(days=365)).strftime('%Y%m%d')
+    return today, one_year_ago
+
+def read_config(file_path):
+    with open(file_path, 'r') as f:
+        config = json.load(f)
+    # 获取默认的日期
+    today, one_year_ago = get_default_dates()
+    # 设置默认参数，如果配置文件中没有这些参数
+    config.setdefault('begin_date', today)
+    config.setdefault('end_date', one_year_ago)
+    return config
 
 if __name__ == "__main__":
     branch = 'develop'

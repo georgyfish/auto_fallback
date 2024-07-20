@@ -1,0 +1,8 @@
+{
+    "Test_Host_IP": "192.168.2.131",
+    "Host_name": "georgy",
+    "passwd": "123456",
+    "branch": "develop",
+    "begin_date" : "20240711",
+    "end_date" : "20240712"
+}

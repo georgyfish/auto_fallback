@@ -28,12 +28,14 @@ class logManager():
     log_level = eval("logging.DEBUG")
     console_level = eval("logging.INFO")
     log_format = "%(asctime)s - %(name)s - %(filename)s[line:%(lineno)d] - %(levelname)s - %(message)s"
+    console_format = "%(message)s"
     log_path = "log"
     def __init__(self, name="main"):
         self.logger = logging.getLogger(name)
         self.logger.setLevel(level=self.log_level)
         # formatter = logging.Formatter(self.log_format)
         formatter = CustomFormatter(self.log_format)
+        console_formatter = CustomFormatter(self.console_format)
         # logging的TimedRotatingFileHandler方法提供滚动输出日志的功能
         _log_file = os.path.join(_baseHome, self.log_path, "log.txt")
         if not os.path.exists(_log_file):
@@ -48,7 +50,7 @@ class logManager():
 
         console = logging.StreamHandler()
         console.setLevel(self.console_level)
-        console.setFormatter(formatter)
+        console.setFormatter(console_formatter)
         self.logger.addHandler(console)
 
 if __name__ == "__main__":
