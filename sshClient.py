@@ -43,7 +43,7 @@ class sshClient():
                 self.log.logger.info(f'Execute "{command}"')
                 stdin, stdout, stderr = self.client.exec_command(command)
                 Output,Error= stdout.read().decode().strip('\n'), stderr.read().decode()
-                self.log.logger.info(f"Output: \n{Output}")
+                self.log.logger.info(f"{Output}")
                 if Error:
                     self.log.logger.warning(f"执行如下命令出错:{command}")
                     self.log.logger.warning(f"Error: \n{Error}")
@@ -59,7 +59,6 @@ class sshClient():
                     self.log.logger.error(f"执行如下命令出错:{command}")
                     self.log.logger.error(f"Error: \n{Error}")
                 return  Output,Error
-        return None, None
     
     def close(self):
         if self.client:

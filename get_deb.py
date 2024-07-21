@@ -1,10 +1,8 @@
 #!/usr/bin/python3
-import os,sys,time
 import datetime
 import subprocess
 from logManager import logManager
-import requests
-from bs4 import BeautifulSoup
+
 
 class deb_info:
     def __init__(self,branch,begin_date,end_date):

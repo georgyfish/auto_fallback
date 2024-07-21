@@ -297,12 +297,14 @@ def middle_search(repo,middle_search_list,Pc):
     # left、right初始值为列表元素的序号index 最小值和最大值
     left = 0 
     right = len(middle_search_list) - 1
-    count = 2
-    left_value = install_driver(repo,middle_search_list[left],Pc)
-    right_value = install_driver(repo,middle_search_list[right],Pc)
-    if left_value == right_value:
-        log.logger.info(f"{middle_search_list}区间内第一个元素和最后一个的结果相同，请确认区间范围")
-        return None               
+    count = 0
+    left_value = "pass"
+    right_value =  "fail"
+    # left_value = install_driver(repo,middle_search_list[left],Pc)
+    # right_value = install_driver(repo,middle_search_list[right],Pc)
+    # if left_value == right_value:
+    #     log.logger.info(f"{middle_search_list}区间内第一个元素和最后一个的结果相同，请确认区间范围")
+    #     return None               
     while left <= right -2 :
         middle = (left + right )//2 
         count += 1 
@@ -325,8 +327,8 @@ def read_config(file_path):
     # 获取默认的日期
     today, one_year_ago = get_default_dates()
     # 设置默认参数，如果配置文件中没有这些参数
-    config.setdefault('begin_date', today)
-    config.setdefault('end_date', one_year_ago)
+    config.setdefault('begin_date', one_year_ago)
+    config.setdefault('end_date', today)
     return config
 
 if __name__ == "__main__":
@@ -336,7 +338,6 @@ if __name__ == "__main__":
     Test_Host_IP = '192.168.114.102'
     Host_name = 'swqa'
     passwd = 'gfx123456'
-    log = logManager('Fallback Test')
     Pc = sshClient.sshClient(Test_Host_IP,Host_name,passwd)
     if 1000 == Pc.login():
         rs = get_Pc_info(Pc)

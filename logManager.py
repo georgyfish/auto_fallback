@@ -7,7 +7,6 @@ from logging.handlers import TimedRotatingFileHandler
 # _baseHome = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _baseHome = os.path.dirname(os.path.abspath(__file__))
 
-
 class Colors:
     GREEN = '\033[92m'
     RED = '\033[91m'
