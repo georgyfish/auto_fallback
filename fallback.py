@@ -32,7 +32,7 @@ def kmd_fallback(kmd_search_list,Pc):
     return kmd_rs_list
 
 # def main(begin_date,end_date,Pc,glvnd,os_type,arch,architecture,dm_type,kernel_version, exec_user):
-def main(config):
+def main(config,component=None,commit_list=None):
     Test_Host_IP,Host_name,passwd,branch,begin_date,end_date = (
     config['Test_Host_IP'],
     config['Host_name'],
@@ -68,25 +68,38 @@ def main(config):
         driver_version = driver[0]
         driver_list.append(driver_version)
     log.logger.info(f"{driver_list=}")
-    deb_rs_list = deb_fallback(driver_list,Pc)
-    umd_search_list, kmd_search_list = common.get_commit_from_deb(deb_rs_list,driver_full_list,branch,arch,glvnd)
-    print(f"{umd_search_list=}\n{kmd_search_list=}")
-    if not umd_fallback(umd_search_list,Pc): 
-        kmd_fallback(kmd_search_list,Pc)
 
+    if component and commit_list:
+        if component == 'umd':
+            umd_fallback(commit_list,Pc)
+        else:
+            kmd_fallback(commit_list,Pc)
+    else:
+        deb_rs_list = deb_fallback(driver_list,Pc)
+        umd_search_list, kmd_search_list = common.get_commit_from_deb(deb_rs_list,driver_full_list,branch,arch,glvnd)
+        print(f"{umd_search_list=}\n{kmd_search_list=}")
+        if not umd_fallback(umd_search_list,Pc): 
+            kmd_fallback(kmd_search_list,Pc)
 
 if __name__ == "__main__":
     config = common.read_config("config.json")
-    parser = argparse.ArgumentParser(description="Process some dates.")
+    parser = argparse.ArgumentParser()
     parser.add_argument('--begin_date', type=str, help='The beginning date in YYYYMMDD format')
     parser.add_argument('--end_date', type=str, help='The ending date in YYYYMMDD format')
+    parser.add_argument('--component',type=str,choices = ['umd','kmd'],help="The component in ['umd','kmd']")
+    parser.add_argument('--commit_list',nargs='+',type=str,help="The commit_list in ['commita','commitb', ...] format")
     args = parser.parse_args()
     # 如果命令行参数提供了 begin_date 或 end_date，则覆盖配置文件中的值
     if args.begin_date:
         config['begin_date'] = args.begin_date
     if args.end_date:
         config['end_date'] = args.end_date
-    main(config)
-        # main(begin_date,end_date,Pc,glvnd,os_type,arch,architecture,dm_type,kernel_version, exec_user)
-
-
+    if args.component:
+        component = args.component
+        if not args.commit_list:
+            parser.error("--component umd requires --commit_list")
+        else:
+            commit_list =args.commit_list
+        main(config,component,commit_list) 
+    else:
+        main(config)
