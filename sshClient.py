@@ -14,7 +14,8 @@ class sshClient():
         self.host = hostname       #连接的目标主机
         self.port = port      #指定端口
         self.user = username      #验证的用户名
-        self.passwd = password      #验证的用户密码
+        self.passwd = password
+        self.login()      #验证的用户密码
 
     def login(self, timeout=10):
         
@@ -90,8 +91,10 @@ class sshClient():
         self.close()
 
 if __name__ == '__main__':
-    Pc = sshClient("192.168.114.102","swqa","gfx123456")
-    if 1000 == Pc.login():
-        Umd_Version = Pc.execute("export DISPLAY=:01.0 && glxinfo -B |grep -i 'OpenGL version string'|grep -oP '\\b[0-9a-f]{9}\\b(?=@)'")[0]
-        print(f"{Umd_Version=}")
+    Pc = sshClient("192.168.2.131","georgy","123456")
+    Structure = Pc.execute("uname -m")[0]
+    print(f"{Structure=}")
+    # if 1000 == Pc.login():
+    #     Structure = Pc.execute("uname -m")[0]
+    #     print(f"{Structure=}")
         # Pc.execute("echo -e /usr/lib/$(uname -m)-linux-gnu/musa |sudo tee /etc/ld.so.conf.d/00-mtgpu.conf")
