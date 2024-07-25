@@ -4,11 +4,56 @@ import os,time,sys,subprocess,re, json
 import sshClient,get_commit
 from datetime import datetime, timezone, timedelta
 from logManager import logManager
+import argparse
 
 # common function
 # class common():
 #     log = logManager('common')
 log = logManager('common')
+
+def fallback(component,driver_list,Pc):
+    if not driver_list:
+        log.logger.error("Get driver_list is empty! Please check driver date!")
+        sys.exit(-1)
+    elif len(driver_list) == 1 :
+        log.logger.info(f"{len(driver_list)=} ; Please check driver date!")
+        sys.exit(0)
+    log.logger.info(f"{component} {driver_list=}")
+    if component == 'deb':
+        rs_list = middle_search('deb',driver_list,Pc)
+        if not rs_list:
+            log.logger.error(f"{driver_list} deb区间无法确定问题引入范围")
+            return None
+            # sys.exit(-1)
+    elif component == 'gr-umd':
+        rs_list = middle_search('gr-umd',driver_list,Pc)
+        if not rs_list:
+            log.logger.error(f"{driver_list} UMD区间无法确定问题引入范围")
+            return None
+    elif component == 'gr-kmd':
+        rs_list = middle_search('gr-kmd',driver_list,Pc)
+        if not rs_list:
+            log.logger.error(f"{driver_list} KMD区间无法确定问题引入范围")
+            return None
+    return rs_list
+
+def validate_commit(commit):
+    commit_pattern = re.compile(r'^[a-z0-9]{9}$')
+    if not commit_pattern.match(commit):
+        raise argparse.ArgumentTypeError(f"Invalid commit format: '{commit}'. 每个commit需满足9位包含小写字母数字的字符串")
+    return commit
+
+def args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-c','--component',type=str,choices = ['umd','kmd'],help="The component in ['umd','kmd']")
+    parser.add_argument('-i','--commit_list',nargs=2,type=validate_commit,help="需输入两笔commit:'commit_pass' 'commit_fail'")
+    parser.add_argument('--begin_date', type=str, default=Config.read_config().get('begin_date'),help='The beginning date in YYYYMMDD format')
+    parser.add_argument('--end_date', type=str, default=Config.read_config().get('end_date'),help='The ending date in YYYYMMDD format')
+    args = parser.parse_args()
+    if args.component:
+        if not args.commit_list:
+            parser.error("'-c'/'--component' option requires '-i'/'--commit_list'")
+    return    args
 
 def slice_full_list(start_end_list, full_list):
     try:
@@ -80,21 +125,6 @@ def get_commit_from_deb(deb_list,branch,arch,glvnd):
             log.logger.error(f"Error:\n{e.stderr}")
         except Exception as e:
             log.logger.error(f"An unexpected error occurred: \n{e}")
-    # for deb_info in driver_full_list:
-    #     if deb_info[0] in deb_rs_list:
-    #         # rs = subprocess.Popen(f"curl {deb_info[1]}", shell=True, close_fds=True, stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.PIPE).communicate()
-    #         log.logger.info(f"curl {deb_info[1]}")
-    #         try:
-    #             rs = subprocess.run(['curl', deb_info[1]], capture_output=True, text=True, check=True)
-    #             repo_tag_dict = eval(rs.stdout)
-    #             log.logger.info(f"{repo_tag_dict=}")
-    #             # result.append(stdout_list)
-    #             gr_umd_start_end.append(repo_tag_dict['gr-umd'][branch])
-    #             gr_kmd_start_end.append(repo_tag_dict['gr-kmd'][branch])
-    #         except subprocess.CalledProcessError as e:
-    #             log.logger.error(f"Error:\n{e.stderr}")
-    #         except Exception as e:
-    #             log.logger.error(f"An unexpected error occurred: \n{e}")
     log.logger.info(f"{gr_umd_start_end=}\n{gr_kmd_start_end=}\n")
     begin_date = re.search(r"\d{4}.\d{2}.\d{2}",deb_list[0]).group()
     end_date = re.search(r"\d{4}.\d{2}.\d{2}",deb_list[1]).group()
@@ -112,28 +142,62 @@ def get_commit_from_deb(deb_list,branch,arch,glvnd):
     umd_search_list,kmd_search_list = check_url("umd",umd_search_list,branch,arch,glvnd),check_url("kmd",kmd_search_list,branch,arch,glvnd)
     return umd_search_list,kmd_search_list
 
-def get_Pc_info(Pc):
-    VALID_OS_TYPE = {"Kylin", "Ubuntu", "uos"}
-    VALID_OS_ARCH_MAP = {"x86_64": "amd64", "aarch64": "arm64", "loongarch64": "loongarch64"}
-    result = {}
-    commands = {
-    "os_type": "cat /etc/lsb-release | head -n 1 | awk -F '='  '{print $2}'",
-    "architecture": "dpkg --print-architecture",
-    "arch":"uname -m" ,
-    "kernel_version": "uname -r",
-    "dm_type" : "systemctl status display-manager.service|grep 'Main PID'  |grep -oP '\(\K[^)]+'",
-    # "driver_version" : "dpkg -s musa musa_all-in-one |grep Version|awk -F: '{print $2}'",
-    # "umd_version" : "export DISPLAY=:0.0 && glxinfo -B |grep -i 'OpenGL version string'|awk '{print $NF}'|awk -F '@' '{print $1}'" ,
-    # "kmd_version" : "sudo grep 'Driver Version' /sys/kernel/debug/musa/version|awk -F[ '{print $NF}'|awk -F] '{print $1}'",
-    # "glvnd" : ""
-    "exec_user" : "ps -ef |grep '/lib/systemd/systemd --user'|grep -v grep|awk -F' ' '{print $1}'|grep -vE 'lightdm|gdm'"
-    }
-    for key,command in commands.items():
-        result[key] = Pc.execute(command)[0]
-    result['glvnd'] = 'glvnd'
-    if result['arch'] == 'aarch64':
-        result['arch'] = 'arm64'
-    return result
+class Config:
+    # file_path = "config.json"
+    def __init__(self,begin_date=None,end_date=None) :
+        config = self.read_config()
+        self.begin_date,self.end_date = begin_date , end_date
+        self.Test_Host_IP,self.Host_name,self.passwd,self.branch = (
+            config['Test_Host_IP'],
+            config['Host_name'],
+            config['passwd'],
+            config['branch']
+            )
+    @classmethod
+    def read_config(self,file_path="config.json"):
+        with open(file_path, 'r') as f:
+            config = json.load(f)
+        # 获取默认的日期
+        today, one_year_ago = self.get_default_dates()
+        # 设置默认参数，如果配置文件中没有这些参数
+        self.begin_date = config.get('begin_date')
+        self.end_date = config.get('end_date')
+        # config.setdefault('begin_date', one_year_ago)
+        # config.setdefault('end_date', today)
+        return config
+    def get_default_dates(self):
+        today = datetime.today().strftime('%Y%m%d')
+        one_year_ago = (datetime.today() - timedelta(days=365)).strftime('%Y%m%d')
+        return today, one_year_ago
+
+class Pc_Info:
+    def __init__(self,Pc):
+        rs = self.get_Pc_info(Pc)
+        self.glvnd,self.os_type,self.arch,self.architecture,self.dm_type,self.kernel_version, self.exec_user= (
+        rs['glvnd'],
+        rs['os_type'],
+        rs['arch'],
+        rs['architecture'],
+        rs['dm_type'],
+        rs['kernel_version'],
+        rs['exec_user']
+    )
+    def get_Pc_info(self,Pc):
+        result = {}
+        commands = {
+        "os_type": "cat /etc/lsb-release | head -n 1 | awk -F '='  '{print $2}'",
+        "architecture": "dpkg --print-architecture",
+        "arch":"uname -m" ,
+        "kernel_version": "uname -r",
+        "dm_type" : r"systemctl status display-manager.service|grep 'Main PID'  |grep -oP '\(\K[^)]+'",
+        "exec_user" : "ps -ef |grep '/lib/systemd/systemd --user'|grep -v grep|awk -F' ' '{print $1}'|grep -vE 'lightdm|gdm'"
+        }
+        for key,command in commands.items():
+            result[key] = Pc.execute(command)[0]
+        result['glvnd'] = 'glvnd'
+        if result['arch'] == 'aarch64':
+            result['arch'] = 'arm64'
+        return result
 
 def wget_url(client,url,destination_folder,file_name=None):
     if not file_name :
@@ -149,10 +213,10 @@ def wget_url(client,url,destination_folder,file_name=None):
         log.logger.info(f"Download {url} success !!!")
         return True
 
-def install_deb(driver_version,Pc,glvnd,os_type,arch,architecture,dm_type,kernel_version, exec_user):
-    log.logger.info('=='*10 + f"Installing  driver {driver_version}" + '=='*10)
-    driver_name = f"{driver_version}+dkms+{glvnd}-{os_type}_{architecture}.deb"
-    work_date = re.search(r"\d{4}.\d{2}.\d{2}",driver_version)
+def install_deb(driver,Pc,glvnd,os_type,architecture, exec_user):
+    log.logger.info('=='*10 + f"Installing  driver {driver}" + '=='*10)
+    driver_name = f"{driver}+dkms+{glvnd}-{os_type}_{architecture}.deb"
+    work_date = re.search(r"\d{4}.\d{2}.\d{2}",driver)
     work_date = work_date.group()
     work_date = datetime.strptime(work_date, "%Y.%m.%d")
     work_date = datetime.strftime(work_date, "%Y%m%d")
@@ -176,19 +240,19 @@ def install_deb(driver_version,Pc,glvnd,os_type,arch,architecture,dm_type,kernel
         for line in result[0].splitlines():
             if "Version: " in line:
                 deb_version = line.split("Version: ")[-1]
-        driver_version = driver_version.split("musa_")[-1]
+        driver_version = driver.split("musa_")[-1]
         if driver_version in deb_version:
             log.logger.info(f"driver安装成功，版本号为 {deb_version}")
-            log.logger.info('=='*10 + f"Install  driver {driver_version} Complete" + '=='*10)
+            log.logger.info('=='*10 + f"Install  driver {driver} Complete" + '=='*10)
             return True
-        elif deb_version != '0' and driver_version not in deb_version:
-            log.logger.error(f"driver安装{driver_version}失败，版本号为 {deb_version}")
+        elif deb_version != '0' and driver not in deb_version:
+            log.logger.error(f"安装{driver}失败，版本号为 {deb_version}")
             return False
         else:
             log.logger.error(f"包 {driver_name} 未安装成功。")
             return False
         
-def install_umd(commit,Pc,glvnd,os_type,arch,architecture,dm_type,kernel_version, exec_user):
+def install_umd(commit,Pc,glvnd,arch,dm_type,exec_user):
     log.logger.info('=='*10 + f"Installing UMD commit {commit}" + '=='*10)
     destination_folder = f"/home/{exec_user}/UMD_fallback"
     # 下载
@@ -224,7 +288,7 @@ def install_umd(commit,Pc,glvnd,os_type,arch,architecture,dm_type,kernel_version
         log.logger.error(f"安装UMD {commit}失败, {Umd_Version=}")
         return False
 
-def install_kmd(commit,Pc,glvnd,os_type,arch,architecture,dm_type,kernel_version, exec_user):
+def install_kmd(commit,Pc,arch,dm_type,kernel_version, exec_user):
     # Download KMD tar or dkms-deb
     # KMD_commit_URL = f"http://oss.mthreads.com/sw-build/gr-kmd/{branch}/{commit}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.tar.gz"
     # # https://oss.mthreads.com/sw-build/gr-kmd/develop/7a52195ed/7a52195ed_x86_64-mtgpu_linux-xorg-release-hw.tar.gz
@@ -294,15 +358,15 @@ def install_kmd(commit,Pc,glvnd,os_type,arch,architecture,dm_type,kernel_version
             log.logger.error(f"kmd no load present !!!")
             return False
 
-def install_driver(repo,driver_version,Pc):
+def install_driver(repo,driver,Pc):
     if repo == 'deb':
         # rs = install_deb(driver_version,Pc)
-        rs = install_deb(driver_version,Pc,glvnd,os_type,arch,architecture,dm_type,kernel_version, exec_user)
+        rs = install_deb(driver,Pc,Pc_Info(Pc).glvnd,Pc_Info(Pc).os_type,Pc_Info(Pc).architecture, Pc_Info(Pc).exec_user)
     elif repo == 'gr-umd':
         # rs =install_umd(driver_version,Pc)
-        rs = install_umd(driver_version,Pc,glvnd,os_type,arch,architecture,dm_type,kernel_version, exec_user)
+        rs = install_umd(driver,Pc,Pc_Info(Pc).glvnd,Pc_Info(Pc).arch,Pc_Info(Pc).dm_type, Pc_Info(Pc).exec_user)
     elif repo == 'gr-kmd':
-        rs = install_kmd(driver_version,Pc,glvnd,os_type,arch,architecture,dm_type,kernel_version, exec_user)
+        rs = install_kmd(driver,Pc,Pc_Info(Pc).arch,Pc_Info(Pc).dm_type,Pc_Info(Pc).kernel_version, Pc_Info(Pc).exec_user)
     test_result = ''
     if not rs:
         test_result = 'fail'
@@ -320,10 +384,10 @@ def middle_search(repo,middle_search_list,Pc):
     # left、right初始值为列表元素的序号index 最小值和最大值
     left = 0 
     right = len(middle_search_list) - 1
-    count = 0
-    left_value = "pass"
+    count = 1
+    # left_value = "pass"
     right_value =  "fail"
-    # left_value = install_driver(repo,middle_search_list[left],Pc)
+    left_value = install_driver(repo,middle_search_list[left],Pc)
     # right_value = install_driver(repo,middle_search_list[right],Pc)
     # if left_value == right_value:
     #     log.logger.info(f"{middle_search_list}区间内第一个元素和最后一个的结果相同，请确认区间范围")
@@ -339,45 +403,26 @@ def middle_search(repo,middle_search_list,Pc):
     log.logger.info(f"总共{count}次查找\n\n定位到问题引入范围是：\"{middle_search_list[left]}\"(不发生)-\"{middle_search_list[right]}\"(发生)之间引入") 
     return middle_search_list[left:right]
 
-def get_default_dates():
-    today = datetime.today().strftime('%Y%m%d')
-    one_year_ago = (datetime.today() - timedelta(days=365)).strftime('%Y%m%d')
-    return today, one_year_ago
 
-def read_config(file_path):
-    with open(file_path, 'r') as f:
-        config = json.load(f)
-    # 获取默认的日期
-    today, one_year_ago = get_default_dates()
-    # 设置默认参数，如果配置文件中没有这些参数
-    config.setdefault('begin_date', one_year_ago)
-    config.setdefault('end_date', today)
-    return config
 
 if __name__ == "__main__":
     branch = 'develop'
     begin_date = '20240711'
     end_date = '20240712'
-    Test_Host_IP = '192.168.115.207'
-    Host_name = 'swqa'
-    passwd = 'gfx123456'
+    # Test_Host_IP = '192.168.115.207'
+    # Host_name = 'swqa'
+    # passwd = 'gfx123456'
+    Test_Host_IP = '192.168.2.131'
+    Host_name = 'georgy'
+    passwd = '123456'
     Pc = sshClient.sshClient(Test_Host_IP,Host_name,passwd)
-    rs = get_Pc_info(Pc)
-    print(f"{rs=}")
-    glvnd,os_type,arch,architecture,dm_type,kernel_version, exec_user= (
-        rs['glvnd'],
-        rs['os_type'],
-        rs['arch'],
-        rs['architecture'],
-        rs['dm_type'],
-        rs['kernel_version'],
-        rs['exec_user']
-    )
-
+    rs = Pc_Info(Pc)
+    print(f"{rs.arch=}")
+    print(f"{Config().begin_date}")
         # commit = 'b6ba94c99'
         # install_umd(commit,Pc,glvnd,os_type,arch,architecture,dm_type,kernel_version, exec_user)
         # commit = 'd8cb481ab'
         # install_kmd('d8cb481ab',Pc,glvnd,os_type,arch,architecture,dm_type,kernel_version, exec_user)
-    deb_list = ['musa_2024.07.11-D+375','musa_2024.07.12-D+378']
-    umd_search_list,kmd_search_list = get_commit_from_deb(deb_list,branch,arch,glvnd)
-    print(f"{umd_search_list=}\n{kmd_search_list=}")
+    # deb_list = ['musa_2024.07.11-D+375','musa_2024.07.12-D+378']
+    # umd_search_list,kmd_search_list = get_commit_from_deb(deb_list,branch,arch,glvnd)
+    # print(f"{umd_search_list=}\n{kmd_search_list=}")
