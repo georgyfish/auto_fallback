@@ -36,14 +36,24 @@ class deb_info:
         # self.log = logManager('get_deb_version')
         # error
         for work_date in work_date_list:
-            url = f"https://oss.mthreads.com/product-release/{self.branch}/{work_date}/daily_build.txt"
+            # url = f"https://oss.mthreads.com/product-release/{self.branch}/{work_date}/daily_build.txt"
+            # 2024.07.08之后才有pc.txt
+            work_date_date = datetime.datetime.strptime(work_date,"%Y%m%d")
+            if work_date_date > datetime.datetime.strptime("20240708","%Y%m%d"):
+                url = f"https://oss.mthreads.com/product-release/{self.branch}/{work_date}/daily_build_pc.txt"
+            else:
+                url = f"https://oss.mthreads.com/product-release/{self.branch}/{work_date}/daily_build.txt"
             if self.check_url(url):
                 self.log.logger.info(f"curl {url}")
                 try:
                     rs = subprocess.run(['curl',url], capture_output=True, text=True, check=True)
-                    stdout_list = rs.stdout.splitlines()
-                    self.log.logger.info(f"{stdout_list=}")
-                    result.append(stdout_list)
+                    # stdout_list = rs.stdout.splitlines()
+                    # self.log.logger.info(f"{stdout_list=}")
+                    # result.append(stdout_list)
+                    driver = rs.stdout.splitlines()[0]
+                    self.log.logger.info(f"{driver=}")
+                    result.append(driver)
+
                 except subprocess.CalledProcessError as e:
                 # 打印错误信息
                     self.log.logger.error(f"Error:\n{e.stderr}")
@@ -77,7 +87,7 @@ class deb_info:
             return False
 
 if __name__ == '__main__':
-    deb_list = deb_info('develop','20240624', '20240627')
+    deb_list = deb_info('develop','20240701', '20240724')
     driver_full_list = deb_list.get_deb_version()
     print(driver_full_list)
     # 示例 URL

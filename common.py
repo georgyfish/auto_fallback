@@ -29,6 +29,7 @@ def slice_full_list(start_end_list, full_list):
 
 def check_url(repo,search_list,branch,arch,glvnd):
     rs = []
+    fail_rs = []
     for commit in search_list:
         if repo == 'umd':
             url = f"http://oss.mthreads.com/release-ci/gr-umd/{branch}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.tar.gz"
@@ -52,44 +53,63 @@ def check_url(repo,search_list,branch,arch,glvnd):
                 rs.append(commit)
             else:
                 log.logger.error(f"{url}地址不存在，移除{repo} {commit}")
+                fail_rs.append(commit)
         except Exception as e:
             log.logger.error(f"An error occurred: {e}")
             # return False
+        log.logger.info(f"因oss地址不存在移除{repo}列表{fail_rs}")
     return rs
 
-def get_commit_from_deb(deb_rs_list,driver_full_list,branch,arch,glvnd):
+def get_commit_from_deb(deb_list,branch,arch,glvnd):
     gr_umd_start_end = []
     gr_kmd_start_end = []
-    for deb_info in driver_full_list:
-        if deb_info[0] in deb_rs_list:
-            # rs = subprocess.Popen(f"curl {deb_info[1]}", shell=True, close_fds=True, stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.PIPE).communicate()
-            log.logger.info(f"curl {deb_info[1]}")
-            try:
-                rs = subprocess.run(['curl', deb_info[1]], capture_output=True, text=True, check=True)
-                repo_tag_dict = eval(rs.stdout)
-                log.logger.info(f"{repo_tag_dict=}")
-                # result.append(stdout_list)
-                gr_umd_start_end.append(repo_tag_dict['gr-umd'][branch])
-                gr_kmd_start_end.append(repo_tag_dict['gr-kmd'][branch])
-            except subprocess.CalledProcessError as e:
-                log.logger.error(f"Error:\n{e.stderr}")
-            except Exception as e:
-                log.logger.error(f"An unexpected error occurred: \n{e}")
+    for deb_info in deb_list:
+        deb_date = re.search(r'\d{4}\.\d{2}\.\d{2}',deb_info).group()
+        log.logger.info(f"{deb_date=}")
+        deb_date = datetime.strptime(deb_date,"%Y.%m.%d").strftime("%Y%m%d")
+        url = f"https://oss.mthreads.com/release-ci/repo_tags/{deb_date}.txt"
+        log.logger.info(f"curl {url}")
+        try:
+            rs = subprocess.run(['curl', url], capture_output=True, text=True, check=True)
+            repo_tag_dict = eval(rs.stdout)
+            log.logger.info(f"{repo_tag_dict=}")
+            # result.append(stdout_list)
+            gr_umd_start_end.append(repo_tag_dict['gr-umd'][branch])
+            gr_kmd_start_end.append(repo_tag_dict['gr-kmd'][branch])
+        except subprocess.CalledProcessError as e:
+            log.logger.error(f"Error:\n{e.stderr}")
+        except Exception as e:
+            log.logger.error(f"An unexpected error occurred: \n{e}")
+    # for deb_info in driver_full_list:
+    #     if deb_info[0] in deb_rs_list:
+    #         # rs = subprocess.Popen(f"curl {deb_info[1]}", shell=True, close_fds=True, stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.PIPE).communicate()
+    #         log.logger.info(f"curl {deb_info[1]}")
+    #         try:
+    #             rs = subprocess.run(['curl', deb_info[1]], capture_output=True, text=True, check=True)
+    #             repo_tag_dict = eval(rs.stdout)
+    #             log.logger.info(f"{repo_tag_dict=}")
+    #             # result.append(stdout_list)
+    #             gr_umd_start_end.append(repo_tag_dict['gr-umd'][branch])
+    #             gr_kmd_start_end.append(repo_tag_dict['gr-kmd'][branch])
+    #         except subprocess.CalledProcessError as e:
+    #             log.logger.error(f"Error:\n{e.stderr}")
+    #         except Exception as e:
+    #             log.logger.error(f"An unexpected error occurred: \n{e}")
     log.logger.info(f"{gr_umd_start_end=}\n{gr_kmd_start_end=}\n")
-    begin_date = re.search(r"\d{4}.\d{2}.\d{2}",deb_rs_list[0]).group()
-    end_date = re.search(r"\d{4}.\d{2}.\d{2}",deb_rs_list[1]).group()
+    begin_date = re.search(r"\d{4}.\d{2}.\d{2}",deb_list[0]).group()
+    end_date = re.search(r"\d{4}.\d{2}.\d{2}",deb_list[1]).group()
     previous_day = datetime.strptime(begin_date,"%Y.%m.%d") - timedelta(days=1)
     # 设置开始时间为前一天12:00，结束时间为当天的23:00
     commit_begin_date = previous_day.replace(hour=12, minute=0, second=0).strftime("%Y-%m-%d %H:%M:%S")
     commit_end_date = datetime.strptime(end_date,"%Y.%m.%d").replace(hour=23,minute=0,second=0).strftime("%Y-%m-%d %H:%M:%S")
     # 格式化输出
-    log.logger.info(f"查询开始时间：{commit_begin_date}\n查询结束时间：{commit_end_date}\n")    
+    log.logger.info(f"commit查询开始时间：{commit_begin_date}\ncommit查询结束时间：{commit_end_date}\n")    
     umd_list = get_commit.get_git_commit_info("gr-umd", branch, commit_begin_date , commit_end_date)
     kmd_list = get_commit.get_git_commit_info("gr-kmd", branch, commit_begin_date , commit_end_date)
     log.logger.info(f"{umd_list=}\n{kmd_list=}\n")
     umd_search_list , kmd_search_list = slice_full_list(gr_umd_start_end,umd_list) , slice_full_list(gr_kmd_start_end,kmd_list)
     log.logger.info(f"{umd_search_list=}\n{kmd_search_list=}\n")
-    umd_search_list,kmd_search_list = check_url("umd",umd_search_list,branch,arch,glvnd),check_url("kmd",kmd_search_list,branch,arch)
+    umd_search_list,kmd_search_list = check_url("umd",umd_search_list,branch,arch,glvnd),check_url("kmd",kmd_search_list,branch,arch,glvnd)
     return umd_search_list,kmd_search_list
 
 def get_Pc_info(Pc):
@@ -101,7 +121,7 @@ def get_Pc_info(Pc):
     "architecture": "dpkg --print-architecture",
     "arch":"uname -m" ,
     "kernel_version": "uname -r",
-    "dm_type" : "cat /etc/X11/default-display-manager |awk -F/ '{print $NF}'",
+    "dm_type" : "systemctl status display-manager.service|grep 'Main PID'  |grep -oP '\(\K[^)]+'",
     # "driver_version" : "dpkg -s musa musa_all-in-one |grep Version|awk -F: '{print $2}'",
     # "umd_version" : "export DISPLAY=:0.0 && glxinfo -B |grep -i 'OpenGL version string'|awk '{print $NF}'|awk -F '@' '{print $1}'" ,
     # "kmd_version" : "sudo grep 'Driver Version' /sys/kernel/debug/musa/version|awk -F[ '{print $NF}'|awk -F] '{print $1}'",
@@ -206,17 +226,29 @@ def install_umd(commit,Pc,glvnd,os_type,arch,architecture,dm_type,kernel_version
 
 def install_kmd(commit,Pc,glvnd,os_type,arch,architecture,dm_type,kernel_version, exec_user):
     # Download KMD tar or dkms-deb
+    # KMD_commit_URL = f"http://oss.mthreads.com/sw-build/gr-kmd/{branch}/{commit}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.tar.gz"
+    # # https://oss.mthreads.com/sw-build/gr-kmd/develop/7a52195ed/7a52195ed_x86_64-mtgpu_linux-xorg-release-hw.tar.gz
+    # destination_folder = f"/home/{exec_user}/KMD_fallback"
+    # rs = wget_url(Pc,KMD_commit_URL,destination_folder,f"{commit}_KMD.tar.gz")
+    # if not rs:
+    #     return False
+    # Pc.execute(f"cd {destination_folder} && mkdir -p {destination_folder}/{commit}_KMD && tar -xvf {commit}_KMD.tar.gz -C {destination_folder}/{commit}_KMD")
+    # rs = Pc.execute("cd %s && find %s_KMD -name mtgpu.ko | awk -F '/' '{print $(NF-2)}' " % (destination_folder,commit))
+    # if rs[0] != kernel_version:
+    #     log.logger.info(f"下载的{commit}_KMD.tar.gz与{kernel_version}不匹配")
+    #     KMD_commit_URL = f"http://oss.mthreads.com/sw-build/gr-kmd/{branch}/{commit}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.deb"
+    #     Pc.execute(f"rm -rf {destination_folder}/{commit}_KMD*")
+    #     rs = wget_url(Pc,KMD_commit_URL,destination_folder,f"{commit}_KMD.deb")
+    #     if not rs:
+    #         return False
     log.logger.info('=='*10 + f"Installing KMD commit {commit}" + '=='*10)
-    KMD_commit_URL = f"http://oss.mthreads.com/sw-build/gr-kmd/{branch}/{commit}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.tar.gz"
-    # https://oss.mthreads.com/sw-build/gr-kmd/develop/7a52195ed/7a52195ed_x86_64-mtgpu_linux-xorg-release-hw.tar.gz
-    destination_folder = f"/home/{exec_user}/KMD_fallback"
-    rs = wget_url(Pc,KMD_commit_URL,destination_folder,f"{commit}_KMD.tar.gz")
-    if not rs:
-        return False
-    Pc.execute(f"cd {destination_folder} && mkdir -p {destination_folder}/{commit}_KMD && tar -xvf {commit}_KMD.tar.gz -C {destination_folder}/{commit}_KMD")
-    rs = Pc.execute("cd %s && find %s_KMD -name mtgpu.ko | awk -F '/' '{print $(NF-2)}' " % (destination_folder,commit))
-    if rs[0] != kernel_version:
-        log.logger.info(f"下载的{commit}_KMD.tar.gz与{kernel_version}不匹配")
+    destination_folder = f"/home/{exec_user}/KMD_fallback"    
+    if (kernel_version == '5.4.0-42-generic' and  arch == 'x86_64') or (kernel_version == '5.4.18-73-generic' and  arch == 'arm64'):
+        KMD_commit_URL = f"http://oss.mthreads.com/sw-build/gr-kmd/{branch}/{commit}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.tar.gz"
+        rs = wget_url(Pc,KMD_commit_URL,destination_folder,f"{commit}_KMD.tar.gz")
+        if not rs:
+            return False
+    else:
         KMD_commit_URL = f"http://oss.mthreads.com/sw-build/gr-kmd/{branch}/{commit}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.deb"
         Pc.execute(f"rm -rf {destination_folder}/{commit}_KMD*")
         rs = wget_url(Pc,KMD_commit_URL,destination_folder,f"{commit}_KMD.deb")
@@ -229,6 +261,7 @@ def install_kmd(commit,Pc,glvnd,os_type,arch,architecture,dm_type,kernel_version
     rs =  Pc.execute(f"[ -e {destination_folder}/{commit}_KMD.tar.gz ] && echo yes  || echo no ")
     if rs[0] == 'yes' :
         log.logger.info("直接替换ko")
+        Pc.execute(f"cd {destination_folder} && mkdir -p {destination_folder}/{commit}_KMD && tar -xvf {commit}_KMD.tar.gz -C {destination_folder}/{commit}_KMD")
         Pc.execute("[ -e /lib/modules/`uname -r`/updates/dkms/mtgpu.ko ] && \
                             sudo mv /lib/modules/`uname -r`/updates/dkms/mtgpu.ko /lib/modules/`uname -r`/updates/dkms/mtgpu.ko.bak")
         Pc.execute("[ ! -d /lib/modules/`uname -r`/extra/ ] && sudo mkdir -p /lib/modules/`uname -r`/extra/ ")
@@ -236,25 +269,15 @@ def install_kmd(commit,Pc,glvnd,os_type,arch,architecture,dm_type,kernel_version
                     sudo cp $(find {commit}_KMD/{arch}-mtgpu_linux-xorg-release/ -name mtgpu.ko) /lib/modules/`uname -r`/extra/")
     else:
         log.logger.info(f"Install {commit} dkms deb")
-        # 需要先卸载musa,安装umd、kmd
-        Pc.execute("sudo dpkg -P musa musa_all_in_one")
-        rs = Pc.execute("[ ! -d /usr/lib/`uname -m`-linux-gnu/musa ] && echo yes || echo no ")
-        if rs[0] == 'yes':
-            print("/usr/lib/`uname -m`-linux-gnu/musa 不存在")
-            while True:
-                
-                umd_commit = input("请输入要安装的UMD commitID:\n\n")
-                if umd_commit != '':
-                    # install_umd(umd_commit,Pc)
-                    install_umd(commit,Pc,glvnd,os_type,arch,architecture,dm_type,kernel_version, exec_user)
-                    break
-        else:
-            print("/usr/lib/$(uname -m)-linux-gnu/musa 存在")
-        Pc.execute(f"sudo dpkg -i {destination_folder}/{commit}_KMD.deb ")
+        Pc.execute('sudo dkms remove mtgpu -v 1.0.0 --all')
+        Pc.execute('sudo rm -rf /usr/src/mtgpu-1.0.0')
+        Pc.execute(f'sudo dpkg -X {destination_folder}/{commit}_KMD.deb /')
+        Pc.execute('sudo dkms add mtgpu -v 1.0.0')
+        Pc.execute('sudo dkms install mtgpu -v 1.0.0')
     rs = Pc.execute("[ ! -e /etc/modprobe.d/mtgpu.conf ] && echo yes || echo no")
     if rs[0] == 'yes':
         Pc.execute("echo -e 'options mtgpu display=mt EnableFWContextSwitch=27'  |sudo tee /etc/modprobe.d/mtgpu.conf")
-    Pc.execute("sudo depmod -a && sudo update-initramfs -u -k `uname -r`")
+    Pc.execute("sudo depmod -a && sudo update-initramfs -u")
     # reboot && check kmd version 
     if Pc.reboot_and_reconnect(wait_time=30, retries=20):
         rs = Pc.execute("lsmod |grep mtgpu")[0]
@@ -335,24 +358,26 @@ if __name__ == "__main__":
     branch = 'develop'
     begin_date = '20240711'
     end_date = '20240712'
-    Test_Host_IP = '192.168.114.102'
+    Test_Host_IP = '192.168.115.207'
     Host_name = 'swqa'
     passwd = 'gfx123456'
     Pc = sshClient.sshClient(Test_Host_IP,Host_name,passwd)
-    if 1000 == Pc.login():
-        rs = get_Pc_info(Pc)
-        print(f"{rs=}")
-        glvnd,os_type,arch,architecture,dm_type,kernel_version, exec_user= (
-            rs['glvnd'],
-            rs['os_type'],
-            rs['arch'],
-            rs['architecture'],
-            rs['dm_type'],
-            rs['kernel_version'],
-            rs['exec_user']
-        )
+    rs = get_Pc_info(Pc)
+    print(f"{rs=}")
+    glvnd,os_type,arch,architecture,dm_type,kernel_version, exec_user= (
+        rs['glvnd'],
+        rs['os_type'],
+        rs['arch'],
+        rs['architecture'],
+        rs['dm_type'],
+        rs['kernel_version'],
+        rs['exec_user']
+    )
 
         # commit = 'b6ba94c99'
         # install_umd(commit,Pc,glvnd,os_type,arch,architecture,dm_type,kernel_version, exec_user)
         # commit = 'd8cb481ab'
-        install_kmd('d8cb481ab',Pc,glvnd,os_type,arch,architecture,dm_type,kernel_version, exec_user)
+        # install_kmd('d8cb481ab',Pc,glvnd,os_type,arch,architecture,dm_type,kernel_version, exec_user)
+    deb_list = ['musa_2024.07.11-D+375','musa_2024.07.12-D+378']
+    umd_search_list,kmd_search_list = get_commit_from_deb(deb_list,branch,arch,glvnd)
+    print(f"{umd_search_list=}\n{kmd_search_list=}")
