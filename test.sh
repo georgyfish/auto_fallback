@@ -88,75 +88,86 @@ function download_umd() {
 # 安装KMD
 function install_kmd() {
     echo "[INFO] Start install KMD"
-    # sudo rmmod mtgpu
     commitID=$1
     sudo rmmod mtgpu
     # sudo modprobe -rv mtgpu
     #下载的KMD内核版本与系统内核版本一致就直接替换安装，否则使用dkms deb安装
     if [ -e KMD_${commitID}.tar.gz ];
     then 
-        echo "[INFO] 直接替换KMD"
+        echo "[INFO] 直接替换mtgpu.ko"
         if [ -e "/lib/modules/`uname -r`/updates/dkms/mtgpu.ko" ];then 
             sudo mv /lib/modules/`uname -r`/updates/dkms/mtgpu.ko /lib/modules/`uname -r`/updates/dkms/mtgpu.ko.bak
         fi
         sudo mkdir -p /lib/modules/`uname -r`/extra/
         # sudo modprobe -rv mtgpu
         sudo cp $(find KMD_${commitID}/${arch}-mtgpu_linux-xorg-release/ -name mtgpu.ko) /lib/modules/`uname -r`/extra/
-        # sudo depmod
+        sudo depmod
         # sudo update-initramfs -u -k `uname -r`
     else
-        echo "[INFO] 安装dkms mtgpu deb, 请确保musa驱动已卸载"
-        echo "[INFO] 安装KMD mtgpu dkms deb失败...musa包与kmd dkms deb mtgpu包冲突，需卸载musa包"
-        # show_umd_info
-        dpkg -s musa
-        if [ $? != 1 ];then
-            echo "[INFO] sudo dpkg -P musa"
-            sudo dpkg -P musa;
-            sudo rm -rf /usr/lib/$(uname -m)-linux-gnu/musa
-            echo "[INFO] musa all in one deb卸载完成"
-        fi
-        # check_umd_install 
-        if [ ! -d /usr/lib/$(uname -m)-linux-gnu/musa ] ;then
-            echo "UMD musa package is not installed;" 
-            read -p "请输入要安装的UMD commitID:" umd_commit
-                if [[ $umd_commit == '' ]];then
-                    echo "[ERROR] You need install UMD package before install KMD!"
-                    exit 1
-                fi
-            download_umd  $umd_commit && install_umd $umd_commit
-        fi
-        commitID=$1
-        echo "[INFO] sudo dpkg -i ${run_path}/KMD_${commitID}.deb "
-        sudo dpkg -i ${run_path}/KMD_${commitID}.deb 
-
+        echo '[INFO] 安装dkms mtgpu deb'
+        # musa deb已经安装的情况下，
+        sudo dkms remove mtgpu -v 1.0.0 --all
+        sudo rm -rf /usr/src/mtgpu-1.0.0 
+        sudo dpkg -X ./KMD_${commitID}.deb /
+        sudo dkms add mtgpu -v 1.0.0
+        sudo install mtgpu -v 1.0.0
     fi
     if [ ! -e /etc/modprobe.d/mtgpu.conf ];then 
-        # wget -q --no-check-certificate https://oss.mthreads.com/product-release/cts/mtgpu_perf.conf -O mtgpu.conf && sudo cp mtgpu.conf /etc/modprobe.d
         echo -e "options mtgpu display=mt EnableFWContextSwitch=27"  |sudo tee /etc/modprobe.d/mtgpu.conf
     fi
     # 重启机器
-    read -p "kmd安装完成，是否要重启机器？[yY/nN]: " answer
-    case $answer in 
-    Y | y)
-        echo "重启机器"
-        sleep 2
-        sudo depmod -a
-        sudo update-initramfs -u -k `uname -r`
-        sudo reboot
-        ;;
-    N | n)
-        echo "执行modprobe -v mtgpu"
-        sudo rmmod mtgpu
-        if [ $? = 0 ];then 
-            sudo depmod 
-            sudo modprobe -v mtgpu      
-        fi
-        ;;
-    *)
-        echo "input error!"
-        ;;
-    esac
+    sudo update-initramfs -u 
+    sudo reboot
     echo "[INFO] KMD install complete"
+        # sudo update-initramfs -u
+        # echo "[INFO] 安装dkms mtgpu deb, 请确保musa驱动已卸载"
+        # echo "[INFO] 安装KMD mtgpu dkms deb失败...musa包与kmd dkms deb mtgpu包冲突，需卸载musa包"
+        # # show_umd_info
+        # dpkg -s musa
+        # if [ $? != 1 ];then
+        #     echo "[INFO] sudo dpkg -P musa"
+        #     sudo dpkg -P musa;
+        #     sudo rm -rf /usr/lib/$(uname -m)-linux-gnu/musa
+        #     echo "[INFO] musa all in one deb卸载完成"
+        # fi
+        # # check_umd_install 
+        # if [ ! -d /usr/lib/$(uname -m)-linux-gnu/musa ] ;then
+        #     echo "UMD musa package is not installed;" 
+        #     read -p "请输入要安装的UMD commitID:" umd_commit
+        #         if [[ $umd_commit == '' ]];then
+        #             echo "[ERROR] You need install UMD package before install KMD!"
+        #             exit 1
+        #         fi
+        #     download_umd  $umd_commit && install_umd $umd_commit
+        # fi
+        # commitID=$1
+        # echo "[INFO] sudo dpkg -i ${run_path}/KMD_${commitID}.deb "
+        # sudo dpkg -i ${run_path}/KMD_${commitID}.deb 
+
+
+
+    # read -p "kmd安装完成，是否要重启机器？[yY/nN]: " answer
+    # case $answer in 
+    # Y | y)
+    #     echo "重启机器"
+    #     sleep 2
+    #     sudo depmod -a
+    #     sudo update-initramfs -u -k `uname -r`
+    #     sudo reboot
+    #     ;;
+    # N | n)
+    #     echo "执行modprobe -v mtgpu"
+    #     sudo rmmod mtgpu
+    #     if [ $? = 0 ];then 
+    #         sudo depmod 
+    #         sudo modprobe -v mtgpu      
+    #     fi
+    #     ;;
+    # *)
+    #     echo "input error!"
+    #     ;;
+    # esac
+    
 }
 
 
