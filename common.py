@@ -5,13 +5,14 @@ import sshClient,get_commit
 from datetime import datetime, timezone, timedelta
 from logManager import logManager
 import argparse
+from get_deb import deb_info
 
 # common function
 # class common():
 #     log = logManager('common')
 log = logManager('common')
 
-def fallback(component,driver_list,Pc):
+def fallback(component,driver_list,Pc,Pc_info,branch):
     if not driver_list:
         log.logger.error("Get driver_list is empty! Please check driver date!")
         sys.exit(-1)
@@ -20,18 +21,18 @@ def fallback(component,driver_list,Pc):
         sys.exit(0)
     log.logger.info(f"{component} {driver_list=}")
     if component == 'deb':
-        rs_list = middle_search('deb',driver_list,Pc)
+        rs_list = middle_search('deb',driver_list,Pc,Pc_info,branch)
         if not rs_list:
             log.logger.error(f"{driver_list} deb区间无法确定问题引入范围")
             return None
             # sys.exit(-1)
     elif component == 'gr-umd':
-        rs_list = middle_search('gr-umd',driver_list,Pc)
+        rs_list = middle_search('gr-umd',driver_list,Pc,Pc_info,branch)
         if not rs_list:
             log.logger.error(f"{driver_list} UMD区间无法确定问题引入范围")
             return None
     elif component == 'gr-kmd':
-        rs_list = middle_search('gr-kmd',driver_list,Pc)
+        rs_list = middle_search('gr-kmd',driver_list,Pc,Pc_info,branch)
         if not rs_list:
             log.logger.error(f"{driver_list} KMD区间无法确定问题引入范围")
             return None
@@ -42,18 +43,6 @@ def validate_commit(commit):
     if not commit_pattern.match(commit):
         raise argparse.ArgumentTypeError(f"Invalid commit format: '{commit}'. 每个commit需满足9位包含小写字母数字的字符串")
     return commit
-
-def args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-c','--component',type=str,choices = ['umd','kmd'],help="The component in ['umd','kmd']")
-    parser.add_argument('-i','--commit_list',nargs=2,type=validate_commit,help="需输入两笔commit:'commit_pass' 'commit_fail'")
-    parser.add_argument('--begin_date', type=str, default=Config.read_config().get('begin_date'),help='The beginning date in YYYYMMDD format')
-    parser.add_argument('--end_date', type=str, default=Config.read_config().get('end_date'),help='The ending date in YYYYMMDD format')
-    args = parser.parse_args()
-    if args.component:
-        if not args.commit_list:
-            parser.error("'-c'/'--component' option requires '-i'/'--commit_list'")
-    return    args
 
 def slice_full_list(start_end_list, full_list):
     try:
@@ -144,31 +133,49 @@ def get_commit_from_deb(deb_list,branch,arch,glvnd):
 
 class Config:
     # file_path = "config.json"
-    def __init__(self,begin_date=None,end_date=None) :
-        config = self.read_config()
-        self.begin_date,self.end_date = begin_date , end_date
+    def __init__(self,file_path="config.json") :
+        self.file_path=file_path
+        self._config_data = self.read_config()
+        self.begin_date,self.end_date = self.get_default_dates()
+        self.component = self._config_data.get('component',None)
+        self.commit_list = self._config_data.get('commit_list',None)
         self.Test_Host_IP,self.Host_name,self.passwd,self.branch = (
-            config['Test_Host_IP'],
-            config['Host_name'],
-            config['passwd'],
-            config['branch']
+            self._config_data['Test_Host_IP'],
+            self._config_data['Host_name'],
+            self._config_data['passwd'],
+            self._config_data['branch']
             )
-    @classmethod
-    def read_config(self,file_path="config.json"):
-        with open(file_path, 'r') as f:
+        self._parse_args()
+
+    def read_config(self):
+        with open(self.file_path, 'r') as f:
             config = json.load(f)
-        # 获取默认的日期
-        today, one_year_ago = self.get_default_dates()
-        # 设置默认参数，如果配置文件中没有这些参数
-        self.begin_date = config.get('begin_date')
-        self.end_date = config.get('end_date')
-        # config.setdefault('begin_date', one_year_ago)
-        # config.setdefault('end_date', today)
         return config
+    
     def get_default_dates(self):
         today = datetime.today().strftime('%Y%m%d')
         one_year_ago = (datetime.today() - timedelta(days=365)).strftime('%Y%m%d')
-        return today, one_year_ago
+        return self._config_data.get('begin_date',one_year_ago),self._config_data.get('end_date',today)
+    
+    def _parse_args(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('-c','--component',type=str, choices = ['umd','kmd'], help="The component in ['umd','kmd']")
+        parser.add_argument('-i','--commit_list',nargs=2, type=validate_commit, help="需输入两笔commit:'commit_pass' 'commit_fail'")
+        parser.add_argument('--begin_date', type=str, help='The begin date in YYYYMMDD format')
+        parser.add_argument('--end_date', type=str, help='The ending date in YYYYMMDD format')
+        args = parser.parse_args()
+
+        if args.begin_date:
+            # 如果命令行参数中提供了 begin_date，则更新 begin_date 属性
+            self.begin_date = args.begin_date
+        if args.end_date:
+            self.end_date = args.end_date
+        if args.component:
+            self.component = args.component
+            if not args.commit_list:
+                parser.error("'-c'/'--component' option requires '-i'/'--commit_list'")
+            else:
+                self.commit_list = args.commit_list
 
 class Pc_Info:
     def __init__(self,Pc):
@@ -213,12 +220,16 @@ def wget_url(client,url,destination_folder,file_name=None):
         log.logger.info(f"Download {url} success !!!")
         return True
 
-def install_deb(driver,Pc,glvnd,os_type,architecture, exec_user):
+def install_deb(driver,Pc,branch,glvnd,os_type,architecture, exec_user):
     log.logger.info('=='*10 + f"Installing  driver {driver}" + '=='*10)
-    driver_name = f"{driver}+dkms+{glvnd}-{os_type}_{architecture}.deb"
+    
     work_date = re.search(r"\d{4}.\d{2}.\d{2}",driver)
     work_date = work_date.group()
     work_date = datetime.strptime(work_date, "%Y.%m.%d")
+    driver_name = f"{driver}+dkms+{glvnd}-{os_type}_{architecture}.deb"
+    if work_date > datetime.strptime("20240708","%Y%m%d"):
+        driver_name = f"{driver}+dkms+{glvnd}-pc_{architecture}.deb"
+    print(f"{driver_name=}")
     work_date = datetime.strftime(work_date, "%Y%m%d")
     driver_url = f"https://oss.mthreads.com/product-release/{branch}/{work_date}/{driver_name}"
     # if 1000 == Pc.login():
@@ -252,7 +263,8 @@ def install_deb(driver,Pc,glvnd,os_type,architecture, exec_user):
             log.logger.error(f"包 {driver_name} 未安装成功。")
             return False
         
-def install_umd(commit,Pc,glvnd,arch,dm_type,exec_user):
+def install_umd(commit,Pc,branch,glvnd,arch,dm_type,exec_user):
+    # branch = Config().branch
     log.logger.info('=='*10 + f"Installing UMD commit {commit}" + '=='*10)
     destination_folder = f"/home/{exec_user}/UMD_fallback"
     # 下载
@@ -288,7 +300,7 @@ def install_umd(commit,Pc,glvnd,arch,dm_type,exec_user):
         log.logger.error(f"安装UMD {commit}失败, {Umd_Version=}")
         return False
 
-def install_kmd(commit,Pc,arch,dm_type,kernel_version, exec_user):
+def install_kmd(commit,Pc,branch,arch,dm_type,kernel_version, exec_user):
     # Download KMD tar or dkms-deb
     # KMD_commit_URL = f"http://oss.mthreads.com/sw-build/gr-kmd/{branch}/{commit}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.tar.gz"
     # # https://oss.mthreads.com/sw-build/gr-kmd/develop/7a52195ed/7a52195ed_x86_64-mtgpu_linux-xorg-release-hw.tar.gz
@@ -305,6 +317,7 @@ def install_kmd(commit,Pc,arch,dm_type,kernel_version, exec_user):
     #     rs = wget_url(Pc,KMD_commit_URL,destination_folder,f"{commit}_KMD.deb")
     #     if not rs:
     #         return False
+    # branch = Config().branch
     log.logger.info('=='*10 + f"Installing KMD commit {commit}" + '=='*10)
     destination_folder = f"/home/{exec_user}/KMD_fallback"    
     if (kernel_version == '5.4.0-42-generic' and  arch == 'x86_64') or (kernel_version == '5.4.18-73-generic' and  arch == 'arm64'):
@@ -358,36 +371,35 @@ def install_kmd(commit,Pc,arch,dm_type,kernel_version, exec_user):
             log.logger.error(f"kmd no load present !!!")
             return False
 
-def install_driver(repo,driver,Pc):
+def install_driver(repo,driver,Pc,Pc_info,branch):
     if repo == 'deb':
-        # rs = install_deb(driver_version,Pc)
-        rs = install_deb(driver,Pc,Pc_Info(Pc).glvnd,Pc_Info(Pc).os_type,Pc_Info(Pc).architecture, Pc_Info(Pc).exec_user)
+        rs = install_deb(driver,Pc,branch,Pc_info.glvnd,Pc_info.os_type,Pc_info.architecture, Pc_info.exec_user)
     elif repo == 'gr-umd':
-        # rs =install_umd(driver_version,Pc)
-        rs = install_umd(driver,Pc,Pc_Info(Pc).glvnd,Pc_Info(Pc).arch,Pc_Info(Pc).dm_type, Pc_Info(Pc).exec_user)
+        rs = install_umd(driver,Pc,branch,Pc_info.glvnd,Pc_info.arch,Pc_info.dm_type, Pc_info.exec_user)
     elif repo == 'gr-kmd':
-        rs = install_kmd(driver,Pc,Pc_Info(Pc).arch,Pc_Info(Pc).dm_type,Pc_Info(Pc).kernel_version, Pc_Info(Pc).exec_user)
-    test_result = ''
-    if not rs:
-        test_result = 'fail'
-        return test_result
-    else:
-        test_result = testcase()
-        return test_result
+        rs = install_kmd(driver,Pc,branch,Pc_info.arch,Pc_info.dm_type,Pc_info.kernel_version, Pc_info.exec_user)
+    return testcase()
+    # test_result = ''
+    # if not rs:
+    #     test_result = 'fail'
+    #     return test_result
+    # else:
+    #     test_result = testcase()
+    #     return test_result
 
 def testcase():
     rs = input("请手动测试后输入测试结果：pass/fail\n")
     return rs
 
 # 二分查找
-def middle_search(repo,middle_search_list,Pc):
+def middle_search(repo,middle_search_list,Pc,Pc_info,branch):
     # left、right初始值为列表元素的序号index 最小值和最大值
     left = 0 
     right = len(middle_search_list) - 1
     count = 1
     # left_value = "pass"
     right_value =  "fail"
-    left_value = install_driver(repo,middle_search_list[left],Pc)
+    left_value = install_driver(repo,middle_search_list[left],Pc,Pc_info,branch)
     # right_value = install_driver(repo,middle_search_list[right],Pc)
     # if left_value == right_value:
     #     log.logger.info(f"{middle_search_list}区间内第一个元素和最后一个的结果相同，请确认区间范围")
@@ -395,7 +407,7 @@ def middle_search(repo,middle_search_list,Pc):
     while left <= right -2 :
         middle = (left + right )//2 
         count += 1 
-        mid_value = install_driver(repo,middle_search_list[middle],Pc)
+        mid_value = install_driver(repo,middle_search_list[middle],Pc,Pc_info,branch)
         if mid_value != None and mid_value == left_value:
             left = middle 
         elif mid_value != None and mid_value == right_value:
@@ -403,18 +415,51 @@ def middle_search(repo,middle_search_list,Pc):
     log.logger.info(f"总共{count}次查找\n\n定位到问题引入范围是：\"{middle_search_list[left]}\"(不发生)-\"{middle_search_list[right]}\"(发生)之间引入") 
     return middle_search_list[left:right]
 
+def run(component=None,commit_list=None):
+    config = Config()
+    Test_Host_IP,Host_name,passwd,branch,begin_date,end_date,component,commit_list = (
+    config.Test_Host_IP,
+    config.Host_name,
+    config.passwd,
+    config.branch,
+    config.begin_date,
+    config.end_date,
+    config.component,
+    config.commit_list
+    )
+    Pc = sshClient.sshClient(Test_Host_IP,Host_name,passwd)
+    Pc_info = Pc_Info(Pc)
+    print(f"{config.component=}")
+    print(f"{Pc_info.os_type=}")
+    if component and commit_list:
+        if component == 'umd':
+            fallback('gr-umd',commit_list,Pc,Pc_info,branch)
+        else:
+            fallback('gr-kmd',commit_list,Pc,Pc_info,branch)
+    else:
+        # 获取deb 列表
+        driver_list = deb_info(branch,begin_date, end_date).get_deb_version() 
+        print(f"{driver_list=}")
+        deb_rs_list = fallback('deb',driver_list,Pc,Pc_info,branch)
+        umd_search_list, kmd_search_list = get_commit_from_deb(deb_rs_list,branch,Pc_info.arch,Pc_info.glvnd)
+        print(f"{umd_search_list=}\n{kmd_search_list=}")
+        if not fallback('gr-umd',umd_search_list,Pc,Pc_info,branch): 
+            fallback('gr-kmd',kmd_search_list,Pc,Pc_info,branch)
 
+# if __name__ == "__main__":
+#     config = Config()
+#     print(f"Begin date: {config.component}")
 
 if __name__ == "__main__":
     branch = 'develop'
     begin_date = '20240711'
     end_date = '20240712'
-    # Test_Host_IP = '192.168.115.207'
-    # Host_name = 'swqa'
-    # passwd = 'gfx123456'
-    Test_Host_IP = '192.168.2.131'
-    Host_name = 'georgy'
-    passwd = '123456'
+    Test_Host_IP = '192.168.115.207'
+    Host_name = 'swqa'
+    passwd = 'gfx123456'
+    # Test_Host_IP = '192.168.2.131'
+    # Host_name = 'georgy'
+    # passwd = '123456'
     Pc = sshClient.sshClient(Test_Host_IP,Host_name,passwd)
     rs = Pc_Info(Pc)
     print(f"{rs.arch=}")
