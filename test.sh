@@ -258,7 +258,24 @@ function show_kmd_info() {
 function show_umd_info() {
 #    echo "shwo umd info "
     FenGeLine "UMD INFO"
-    umd_commit=$(export DISPLAY=:0.0 && glxinfo -B |grep -i "OpenGL version string"|awk '{print $NF}'|awk -F "@" '{print $1}')
+    display_var=$(who | grep -o '(:[0-9]\+)' | sed 's/[()]//g' |head -n 1)
+    if [ -z "$display_var" ];then   
+        display_var=$(w -h  | grep -o '(:[0-9]\+)' | sed 's/[()]//g' |head -n 1)
+    fi
+    if [ -z "$display_var" ];then
+        display_var=':0'
+        export DISPLAY=$display_var && xrandr_output=$(xrandr 2>\$1)
+        if echo "$xrandr_output" | grep -q "Can't open display";then 
+            display_var=':1'
+            export DISPLAY=$display_var && xrandr_output=$(xrandr 2>\$1)
+            if echo "$xrandr_output" | grep -q "Can't open display";then 
+                echo "xrandr failed to run with both :0 and :1"
+                exit 1
+            fi
+        fi
+    fi
+    echo "DISPLAY=$display_var"
+    umd_commit=$(export DISPLAY=$display_var && glxinfo -B |grep -i "OpenGL version string"|awk '{print $NF}'|awk -F "@" '{print $1}')
     # umd_commit=$(clinfo |grep "Driver Version"|awk -F' '  '{print $6}'|awk -F'@' '{print $1}')
     if [[ $umd_commit != "" ]]
     then
@@ -349,8 +366,8 @@ function main() {
     parse_args "$@"
     if [ $summary -eq 1 ];then 
         show_deb_info
-        show_kmd_info
         show_umd_info
+        show_kmd_info
         exit 0
     else    
         if [[ $component == '0' ]] || [[ $branch == '0' ]]
