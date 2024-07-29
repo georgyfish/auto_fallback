@@ -260,7 +260,7 @@ function show_umd_info() {
     FenGeLine "UMD INFO"
     display_var=$(who | grep -o '(:[0-9]\+)' | sed 's/[()]//g' |head -n 1)
     if [ -z "$display_var" ];then   
-        display_var=$(w -h  | grep -o '(:[0-9]\+)' | sed 's/[()]//g' |head -n 1)
+        display_var=$(w -h  | awk '{print $3}'|grep -o '^:[0-9]\+' |head -n 1)
     fi
     if [ -z "$display_var" ];then
         display_var=':0'
@@ -408,7 +408,7 @@ glvnd="-glvnd"
 # if [ $os_type = "Kylin" ];then 
 #     glvnd=''
 # fi
-dm_type=$(cat /etc/X11/default-display-manager |awk -F/ '{print $NF}') 
+dm_type=$(systemctl status display-manager.service|grep 'Main PID'  |grep -oP '\(\K[^)]+') 
 main "$@"
 
 
