@@ -364,7 +364,6 @@ def middle_search(repo,middle_search_list,Pc,Pc_info,branch):
         elif mid_value != None and mid_value == right_value:
             right = middle 
     log.logger.info(f"总共{count}次查找\n\n定位到问题引入范围是：\"{middle_search_list[left]}\"(不发生)-\"{middle_search_list[right]}\"(发生)之间引入") 
-   
     return middle_search_list[left:right+1]
 
 def run():

@@ -141,31 +141,53 @@ class deb_info:
             self.log.logger.error(f"list index out of range! {start_end_list} not in {full_list}")
             sys.exit(-1)
 
+    def get_commit_from_deb_info(self,deb_version):
+        branch = self.branch
+        deb_date = re.search(r'\d{4}\.\d{2}\.\d{2}',deb_version).group()
+        self.log.logger.info(f"{deb_date=}")
+        deb_date = datetime.datetime.strptime(deb_date,"%Y.%m.%d").strftime("%Y%m%d")
+        # info.txt 需确认下具体格式
+        url = f"https://oss.mthreads.com/porduct-release/{branch}/{deb_version}_info.txt"
+        response = requests.get(url)
+        response.raise_for_status()
+        tmp_list = response.text.splitlines()
+        for tmp in tmp_list:
+            key = tmp.split(':')[0]
+            value = tmp.split(':')[1]
+            if key == 'kmd':
+                kmd_commit = value
+            if key == 'umd':
+                umd_commit = value
+        return umd_commit,kmd_commit
+
     # 通过deb_info.txt获取commit信息
     def get_UMD_KMD_commit_from_deb_info(self,deb_list):
         branch = self.branch
         gr_umd_start_end = []
         gr_kmd_start_end = []
-        for deb in deb_list:
-            deb_date = re.search(r'\d{4}\.\d{2}\.\d{2}',deb).group()
-            self.log.logger.info(f"{deb_date=}")
-            deb_date = datetime.datetime.strptime(deb_date,"%Y.%m.%d").strftime("%Y%m%d")
-            # info.txt 需确认下具体格式
-            url = f"https://oss.mthreads.com/porduct-release/{branch}/{deb}_info.txt"
-            response = requests.get(url)
-            response.raise_for_status()
-            tmp_list = response.text.splitlines()
-            for tmp in tmp_list:
-                key = tmp.split(':')[0]
-                value = tmp.split(':')[1]
-                if key == 'kmd':
-                    kmd_commit = value
-                if key == 'umd':
-                    umd_commit = value
+        for deb_version in deb_list:
+            umd_commit,kmd_commit = self.get_commit_from_deb_info(deb_version)
             gr_umd_start_end.append(umd_commit)
             gr_kmd_start_end.append(kmd_commit)
         self.log.logger.info(f"{gr_umd_start_end=}\n{gr_kmd_start_end=}\n")
         return gr_umd_start_end,gr_kmd_start_end
+
+    # 通过repo_tag.txt获取commit信息
+    def get_commit_from_repo_tag_txt(self,deb_version):
+        branch = self.branch
+        deb_date = re.search(r'\d{4}\.\d{2}\.\d{2}',deb_version).group()
+        self.log.logger.info(f"{deb_date=}")
+        deb_date = datetime.datetime.strptime(deb_date,"%Y.%m.%d").strftime("%Y%m%d")
+        url = f"https://oss.mthreads.com/release-ci/repo_tags/{deb_date}.txt"
+        try:
+            response = requests.get(url)
+            json_obj = response.json()
+            umd_commit = json_obj['gr-umd'][branch]
+            kmd_commit = json_obj['gr-kmd'][branch]
+        except Exception as e:
+            self.log.logger.error(f"An unexpected error occurred: \n{e}")
+        return umd_commit,kmd_commit
+
 
     # 通过deb日期 repo_tag获取commit信息
     # 两版deb驱动，分别根据repo_tag.txt获取2笔UMD、2笔KMD区间
@@ -174,31 +196,7 @@ class deb_info:
     # 截取UMD区间的头尾commit在commit列表中的index序号，切片commit列表
     # 检查每个commit的URL，过滤无法下载的；
     def get_UMD_KMD_commit_from_deb(self,deb_list):
-        branch = self.branch
         gr_umd_start_end,gr_kmd_start_end = self.get_UMD_KMD_commit_from_deb_info(deb_list)
-        # gr_umd_start_end = []
-        # gr_kmd_start_end = []
-        # for deb in deb_list:
-        #     deb_date = re.search(r'\d{4}\.\d{2}\.\d{2}',deb).group()
-        #     self.log.logger.info(f"{deb_date=}")
-        #     deb_date = datetime.datetime.strptime(deb_date,"%Y.%m.%d").strftime("%Y%m%d")
-        #     url = f"https://oss.mthreads.com/release-ci/repo_tags/{deb_date}.txt"
-        #     self.log.logger.info(f"curl {url}")
-        #     try:
-        #         # response = requests.get(url)
-        #         # json_obj = response.json()
-        #         # gr_umd_start_end.append(json_obj['gr-umd'][branch])
-        #         # gr_kmd_start_end.append(json_obj['gr-kmd'][branch])
-        #         rs = subprocess.run(['curl', url], capture_output=True, text=True, check=True)
-        #         repo_tag_dict = eval(rs.stdout)
-        #         self.log.logger.info(f"{repo_tag_dict=}")
-        #         gr_umd_start_end.append(repo_tag_dict['gr-umd'][branch])
-        #         gr_kmd_start_end.append(repo_tag_dict['gr-kmd'][branch])
-        #     except subprocess.CalledProcessError as e:
-        #         self.log.logger.error(f"Error:\n{e.stderr}")
-        #     except Exception as e:
-        #         self.log.logger.error(f"An unexpected error occurred: \n{e}")
-        # self.log.logger.info(f"{gr_umd_start_end=}\n{gr_kmd_start_end=}\n")
         begin_date = re.search(r"\d{4}.\d{2}.\d{2}",deb_list[0]).group()
         end_date = re.search(r"\d{4}.\d{2}.\d{2}",deb_list[1]).group()
         previous_day = datetime.datetime.strptime(begin_date,"%Y.%m.%d") - datetime.timedelta(days=1)
