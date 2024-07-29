@@ -7,14 +7,14 @@ from logManager import logManager
 import argparse
 from get_deb import deb_info
 
-# log = logManager('common')
+log = logManager('common')
 
 class Driver_Installer:
     def __init__(self,sshClient_obj,Pc_info,branch) -> None:
         self.log = logManager('Driver Installer')
         self.branch = branch
         self.Pc = sshClient_obj
-        glvnd,arch,os_type,architecture,exec_user,kernel_version,dm_type=(
+        self.glvnd,self.arch,self.os_type,self.architecture,self.exec_user,self.kernel_version,self.dm_type=(
         Pc_info.glvnd,
         Pc_info.arch,
         Pc_info.os_type,
@@ -66,8 +66,63 @@ class Driver_Installer:
             log.logger.error(f"安装UMD {commit}失败, {Umd_Version=}")
             return False
 
-    def install_kmd():
-        pass
+    def install_kmd(self,commit):
+        Pc = self.Pc
+        branch,arch,dm_type,kernel_version, exec_user = (
+            self.branch,
+            self.arch,
+            self.dm_type,
+            self.kernel_version,
+            self.exec_user
+        )
+        self.log.logger.info('=='*10 + f"Installing KMD commit {commit}" + '=='*10)
+        destination_folder = f"/home/{exec_user}/KMD_fallback"    
+        if (kernel_version == '5.4.0-42-generic' and  arch == 'x86_64') or (kernel_version == '5.4.18-73-generic' and  arch == 'arm64'):
+            KMD_commit_URL = f"http://oss.mthreads.com/sw-build/gr-kmd/{branch}/{commit}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.tar.gz"
+            wget_url(Pc,KMD_commit_URL,destination_folder,f"{commit}_KMD.tar.gz")
+        else:
+            KMD_commit_URL = f"http://oss.mthreads.com/sw-build/gr-kmd/{branch}/{commit}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.deb"
+            Pc.execute(f"rm -rf {destination_folder}/{commit}_KMD*")
+            wget_url(Pc,KMD_commit_URL,destination_folder,f"{commit}_KMD.deb")
+        # 安装dkms mtgpu.deb需要卸载musa ddk
+        Pc.execute(f"sudo systemctl stop {dm_type}")
+        time.sleep(10)
+        Pc.execute("sudo rmmod mtgpu")
+        rs =  Pc.execute(f"[ -e {destination_folder}/{commit}_KMD.tar.gz ] && echo yes  || echo no ")
+        if rs[0] == 'yes' :
+            self.log.logger.info("直接替换ko")
+            Pc.execute(f"cd {destination_folder} && mkdir -p {destination_folder}/{commit}_KMD && tar -xvf {commit}_KMD.tar.gz -C {destination_folder}/{commit}_KMD")
+            Pc.execute("[ -e /lib/modules/`uname -r`/updates/dkms/mtgpu.ko ] && \
+                                sudo mv /lib/modules/`uname -r`/updates/dkms/mtgpu.ko /lib/modules/`uname -r`/updates/dkms/mtgpu.ko.bak")
+            Pc.execute("[ ! -d /lib/modules/`uname -r`/extra/ ] && sudo mkdir -p /lib/modules/`uname -r`/extra/ ")
+            Pc.execute(f"cd {destination_folder} && \
+                        sudo cp $(find {commit}_KMD/{arch}-mtgpu_linux-xorg-release/ -name mtgpu.ko) /lib/modules/`uname -r`/extra/")
+        else:
+            self.log.logger.info(f"Install {commit} dkms deb")
+            Pc.execute('sudo dkms remove mtgpu -v 1.0.0 --all')
+            Pc.execute('sudo rm -rf /usr/src/mtgpu-1.0.0')
+            Pc.execute(f'sudo dpkg -X {destination_folder}/{commit}_KMD.deb /')
+            Pc.execute('sudo dkms add mtgpu -v 1.0.0')
+            Pc.execute('sudo dkms install mtgpu -v 1.0.0')
+        rs = Pc.execute("[ ! -e /etc/modprobe.d/mtgpu.conf ] && echo yes || echo no")
+        if rs[0] == 'yes':
+            Pc.execute("echo -e 'options mtgpu display=mt EnableFWContextSwitch=27'  |sudo tee /etc/modprobe.d/mtgpu.conf")
+        Pc.execute("sudo depmod -a && sudo update-initramfs -u")
+        # reboot && check kmd version 
+        if Pc.reboot_and_reconnect(wait_time=30, retries=20):
+            rs = Pc.execute("lsmod |grep mtgpu")[0]
+            if rs:
+                Kmd_Version = Pc.execute("modinfo mtgpu |grep build_version |awk '{print $NF}'")[0]
+                if Kmd_Version in  commit:
+                    self.log.logger.info(f"安装KMD成功，版本号为 {Kmd_Version}")
+                    self.log.logger.info('=='*10 + f"Install KMD commit {commit} Complete" + '=='*10)
+                    return True
+                else:
+                    self.log.logger.error(f"安装KMD {commit}失败, {Kmd_Version=}")
+                    return False
+            else:
+                self.log.logger.error(f"kmd no load present !!!")
+                return False
     
     def install_deb(self,driver):
         Pc = self.Pc
@@ -116,17 +171,50 @@ class Driver_Installer:
                 self.log.logger.error(f"包 {driver_name} 未安装成功。")
                 return False
 
-    def show_kmd():
-        pass
+    def show_kmd(self):
+        Pc = self.Pc
+        rs = Pc.execute("lsmod |grep mtgpu")[0]
+        if rs:
+            Kmd_Version = Pc.execute("modinfo mtgpu |grep build_version |awk '{print $NF}'")[0]
+            if Kmd_Version:
+                self.log.logger.info(f"{Kmd_Version=}")
 
     def show_umd(self):
-        display_var = ':0.0'
+        Pc = self.Pc
+        display_var = Pc.execute("who | grep -o '(:[0-9]\+)' | sed 's/[()]//g' |head -n 1")[0]
+        if not display_var:
+            display_var = Pc.execute("w -h  | awk '{print $3}'|grep -o '^:[0-9]\+' |head -n 1")[0]
+            if not display_var:
+                display_var=':0'
+                rs = Pc.execute(f"export DISPLAY={display_var} ; xrandr 2>$1")[0]
+                if "Can't open display" in rs:
+                    display_var=':1'
+                    rs = Pc.execute(f"export DISPLAY={display_var} ; xrandr 2>$1")[0]
+                    if "Can't open display" in rs:
+                        print("xrandr failed to run with both :0 and :1")
         Umd_Version = Pc.execute(f"export DISPLAY={display_var} && glxinfo -B |grep -i 'OpenGL version string'|grep -oP '\\b[0-9a-f]{{9}}\\b(?=@)'")[0]
         if  Umd_Version :
             self.log.logger.info(f"{Umd_Version=}")
         return Umd_Version
 
+    def get_display_var(self):
+        Pc = self.Pc
+        display_var = Pc.execute("who | grep -o '(:[0-9]\+)' | sed 's/[()]//g' |head -n 1")[0]
+        if not display_var:
+            display_var = Pc.execute("w -h  | awk '{print $3}'|grep -o '^:[0-9]\+' |head -n 1")[0]
+            if not display_var:
+                display_var=':0'
+                rs = Pc.execute(f"export DISPLAY={display_var} ; xrandr 2>$1")[0]
+                if "Can't open display" in rs:
+                    display_var=':1'
+                    rs = Pc.execute(f"export DISPLAY={display_var} ; xrandr 2>$1")[0]
+                    if "Can't open display" in rs:
+                        print("xrandr failed to run with both :0 and :1")
+                        sys.exit(-1)
+        return display_var
+
     def show_deb(self):
+        Pc = self.Pc
         result = Pc.execute(f"dpkg -s musa")
         for line in result[0].splitlines():
             if "Version: " in line:
@@ -234,175 +322,19 @@ def wget_url(client,url,destination_folder,file_name=None):
         log.logger.info(f"Download {url} success !!!")
         return True
 
-def install_deb(driver,Pc,branch,glvnd,os_type,architecture, exec_user):
-    log.logger.info('=='*10 + f"Installing  driver {driver}" + '=='*10)
-    # 下载
-    work_date = re.search(r"\d{4}.\d{2}.\d{2}",driver).group()
-    work_date = datetime.strptime(work_date, "%Y.%m.%d").strftime(work_date, "%Y%m%d")
-    driver_name = f"{driver}+dkms+{glvnd}-{os_type}_{architecture}.deb"
-    # 20240708后使用pc deb测试
-    if work_date.strptime(work_date, "%Y%m%d") > datetime.strptime("20240708","%Y%m%d"):
-        driver_name = f"{driver}+dkms+{glvnd}-pc_{architecture}.deb"
-    print(f"{driver_name=}")
-    driver_url = f"https://oss.mthreads.com/product-release/{branch}/{work_date}/{driver_name}"
-    destination_folder = f"/home/{exec_user}/deb_fallback"
-    wget_url(Pc,driver_url,destination_folder)
-    # 安装
-    rs = Pc.execute(f"sudo dpkg -P musa && sudo apt install {destination_folder}/{driver_name} -y --allow-downgrades && \
-            echo 'apt install pass' || echo 'apt install fail'")
-    # check  install command run status;  
-    if 'apt install fail' in rs:
-        log.logger.error(f'"apt install {destination_folder}/{driver_name} -y"执行报错！')
-        return False
-    log.logger.info(f'"apt install {destination_folder}/{driver_name} -y"执行未报错')
-    # 重启
-    if Pc.reboot_and_reconnect(wait_time=30, retries=10):
-        deb_version = '0'
-        result = Pc.execute(f"dpkg -s musa")
-        for line in result[0].splitlines():
-            if "Version: " in line:
-                deb_version = line.split("Version: ")[-1]
-        driver_version = driver.split("musa_")[-1]
-        if driver_version in deb_version:
-            log.logger.info(f"driver安装成功，版本号为 {deb_version}")
-            log.logger.info('=='*10 + f"Install  driver {driver} Complete" + '=='*10)
-            return True
-        elif deb_version != '0' and driver not in deb_version:
-            log.logger.error(f"安装{driver}失败，版本号为 {deb_version}")
-            return False
-        else:
-            log.logger.error(f"包 {driver_name} 未安装成功。")
-            return False
-        
-def install_umd(commit,Pc,branch,glvnd,arch,dm_type,exec_user):
-    # branch = Config().branch
-    log.logger.info('=='*10 + f"Installing UMD commit {commit}" + '=='*10)
-    destination_folder = f"/home/{exec_user}/UMD_fallback"
-    # 下载
-    if glvnd == 'glvnd':
-        UMD_commit_URL = f"http://oss.mthreads.com/release-ci/gr-umd/{branch}/{commit}_{arch}-mtgpu_linux-xorg-release-hw-{glvnd}.tar.gz"
-    else:
-        UMD_commit_URL = f"http://oss.mthreads.com/release-ci/gr-umd/{branch}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.tar.gz"
-    
-    rs = wget_url(Pc,UMD_commit_URL,destination_folder,f"{commit}_UMD.tar.gz")
-    Pc.execute(f"cd {destination_folder} && mkdir -p {destination_folder}/{commit}_UMD && tar -xvf  {commit}_UMD.tar.gz -C {destination_folder}/{commit}_UMD")
-    
-    # 安装
-    if glvnd == 'glvnd':
-        Pc.execute(f"cd {destination_folder}/{commit}_UMD/{arch}-mtgpu_linux-xorg-release/ && sudo ./install.sh -g -n -u . ; sudo ./install.sh -g -n -s .")
-    else:
-        Pc.execute(f"cd {destination_folder}/{commit}_UMD/${arch}-mtgpu_linux-xorg-release/ && sudo ./install.sh -u . ; sudo ./install.sh -s .")
-    rs = Pc.execute("[ -f /etc/ld.so.conf.d/00-mtgpu.conf ] && echo yes  || echo no")[0]
-    if rs == 'no' :
-        Pc.execute("echo -e /usr/lib/$(uname -m)-linux-gnu/musa |sudo tee /etc/ld.so.conf.d/00-mtgpu.conf")
-        if Pc.execute("uname -m")[0] == "aarch64":
-            Pc.execute("echo -e '/usr/lib/arm-linux-gnueabihf/musa' |sudo tee -a /etc/ld.so.conf.d/00-mtgpu.conf")
-    Pc.execute(f"sudo ldconfig && sudo systemctl restart {dm_type}")
-    # check umd version
-    time.sleep(10)
-    Umd_Version = Pc.execute("export DISPLAY=:0.0 && glxinfo -B |grep -i 'OpenGL version string'|grep -oP '\\b[0-9a-f]{9}\\b(?=@)'")[0]
-    if Umd_Version == commit:
-        log.logger.info(f"安装UMD 成功，版本号为 {Umd_Version}")
-        log.logger.info('=='*10 + f"Install UMD commit {commit} Complete" + '=='*10)
-        return True
-    else:
-        log.logger.error(f"安装UMD {commit}失败, {Umd_Version=}")
-        return False
-
-def install_kmd(commit,Pc,branch,arch,dm_type,kernel_version, exec_user):
-    # Download KMD tar or dkms-deb
-    # KMD_commit_URL = f"http://oss.mthreads.com/sw-build/gr-kmd/{branch}/{commit}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.tar.gz"
-    # # https://oss.mthreads.com/sw-build/gr-kmd/develop/7a52195ed/7a52195ed_x86_64-mtgpu_linux-xorg-release-hw.tar.gz
-    # destination_folder = f"/home/{exec_user}/KMD_fallback"
-    # rs = wget_url(Pc,KMD_commit_URL,destination_folder,f"{commit}_KMD.tar.gz")
-    # if not rs:
-    #     return False
-    # Pc.execute(f"cd {destination_folder} && mkdir -p {destination_folder}/{commit}_KMD && tar -xvf {commit}_KMD.tar.gz -C {destination_folder}/{commit}_KMD")
-    # rs = Pc.execute("cd %s && find %s_KMD -name mtgpu.ko | awk -F '/' '{print $(NF-2)}' " % (destination_folder,commit))
-    # if rs[0] != kernel_version:
-    #     log.logger.info(f"下载的{commit}_KMD.tar.gz与{kernel_version}不匹配")
-    #     KMD_commit_URL = f"http://oss.mthreads.com/sw-build/gr-kmd/{branch}/{commit}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.deb"
-    #     Pc.execute(f"rm -rf {destination_folder}/{commit}_KMD*")
-    #     rs = wget_url(Pc,KMD_commit_URL,destination_folder,f"{commit}_KMD.deb")
-    #     if not rs:
-    #         return False
-    # branch = Config().branch
-    log.logger.info('=='*10 + f"Installing KMD commit {commit}" + '=='*10)
-    destination_folder = f"/home/{exec_user}/KMD_fallback"    
-    if (kernel_version == '5.4.0-42-generic' and  arch == 'x86_64') or (kernel_version == '5.4.18-73-generic' and  arch == 'arm64'):
-        KMD_commit_URL = f"http://oss.mthreads.com/sw-build/gr-kmd/{branch}/{commit}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.tar.gz"
-        wget_url(Pc,KMD_commit_URL,destination_folder,f"{commit}_KMD.tar.gz")
-    else:
-        KMD_commit_URL = f"http://oss.mthreads.com/sw-build/gr-kmd/{branch}/{commit}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.deb"
-        Pc.execute(f"rm -rf {destination_folder}/{commit}_KMD*")
-        wget_url(Pc,KMD_commit_URL,destination_folder,f"{commit}_KMD.deb")
-    # 安装dkms mtgpu.deb需要卸载musa ddk
-    Pc.execute(f"sudo systemctl stop {dm_type}")
-    time.sleep(10)
-    Pc.execute("sudo rmmod mtgpu")
-    rs =  Pc.execute(f"[ -e {destination_folder}/{commit}_KMD.tar.gz ] && echo yes  || echo no ")
-    if rs[0] == 'yes' :
-        log.logger.info("直接替换ko")
-        Pc.execute(f"cd {destination_folder} && mkdir -p {destination_folder}/{commit}_KMD && tar -xvf {commit}_KMD.tar.gz -C {destination_folder}/{commit}_KMD")
-        Pc.execute("[ -e /lib/modules/`uname -r`/updates/dkms/mtgpu.ko ] && \
-                            sudo mv /lib/modules/`uname -r`/updates/dkms/mtgpu.ko /lib/modules/`uname -r`/updates/dkms/mtgpu.ko.bak")
-        Pc.execute("[ ! -d /lib/modules/`uname -r`/extra/ ] && sudo mkdir -p /lib/modules/`uname -r`/extra/ ")
-        Pc.execute(f"cd {destination_folder} && \
-                    sudo cp $(find {commit}_KMD/{arch}-mtgpu_linux-xorg-release/ -name mtgpu.ko) /lib/modules/`uname -r`/extra/")
-    else:
-        log.logger.info(f"Install {commit} dkms deb")
-        Pc.execute('sudo dkms remove mtgpu -v 1.0.0 --all')
-        Pc.execute('sudo rm -rf /usr/src/mtgpu-1.0.0')
-        Pc.execute(f'sudo dpkg -X {destination_folder}/{commit}_KMD.deb /')
-        Pc.execute('sudo dkms add mtgpu -v 1.0.0')
-        Pc.execute('sudo dkms install mtgpu -v 1.0.0')
-    rs = Pc.execute("[ ! -e /etc/modprobe.d/mtgpu.conf ] && echo yes || echo no")
-    if rs[0] == 'yes':
-        Pc.execute("echo -e 'options mtgpu display=mt EnableFWContextSwitch=27'  |sudo tee /etc/modprobe.d/mtgpu.conf")
-    Pc.execute("sudo depmod -a && sudo update-initramfs -u")
-    # reboot && check kmd version 
-    if Pc.reboot_and_reconnect(wait_time=30, retries=20):
-        rs = Pc.execute("lsmod |grep mtgpu")[0]
-        if rs:
-            Kmd_Version = Pc.execute("modinfo mtgpu |grep build_version |awk '{print $NF}'")[0]
-            if Kmd_Version in  commit:
-                log.logger.info(f"安装KMD成功，版本号为 {Kmd_Version}")
-                log.logger.info('=='*10 + f"Install KMD commit {commit} Complete" + '=='*10)
-                return True
-            else:
-                log.logger.error(f"安装KMD {commit}失败, {Kmd_Version=}")
-                return False
-        else:
-            log.logger.error(f"kmd no load present !!!")
-            return False
 
 def install_driver(repo,driver,Pc,Pc_info,branch):
-    glvnd,arch,os_type,architecture,exec_user,kernel_version,dm_type=(
-        Pc_info.glvnd,
-        Pc_info.arch,
-        Pc_info.os_type,
-        Pc_info.architecture,
-        Pc_info.exec_user,
-        Pc_info.kernel_version,
-        Pc_info.dm_type
-    )
+    driver_instller = Driver_Installer(Pc,Pc_info,branch)
     if repo == 'deb':
-        rs = install_deb(driver,Pc,branch,glvnd,os_type,architecture, exec_user)
+        rs = driver_instller.install_deb(driver)
     elif repo == 'umd':
-        rs = install_umd(driver,Pc,branch,glvnd,arch,dm_type, exec_user)
+        rs = driver_instller.install_umd(driver)
     elif repo == 'kmd':
-        rs = install_kmd(driver,Pc,branch,arch,dm_type,kernel_version, exec_user)
+        rs = driver_instller.install_kmd(driver)
     if not rs: 
         print(f"{repo} install fail.")
         sys.exit(-1)
     return testcase()
-    # test_result = ''
-    # if not rs:
-    #     test_result = 'fail'
-    #     return test_result
-    # else:
-    #     test_result = testcase()
-    #     return test_result
 
 def testcase():
     rs = input("请手动测试后输入测试结果：pass/fail\n")
@@ -414,13 +346,15 @@ def middle_search(repo,middle_search_list,Pc,Pc_info,branch):
     left = 0 
     right = len(middle_search_list) - 1
     count = 1
-    # left_value = "pass"
-    right_value =  "fail"
+    # right_value = "fail"
+    if repo == 'deb':
+        right_value =  "fail"
+    else:
+        right_value = install_driver(repo,middle_search_list[right],Pc,Pc_info,branch)
     left_value = install_driver(repo,middle_search_list[left],Pc,Pc_info,branch)
-    # right_value = install_driver(repo,middle_search_list[right],Pc)
-    # if left_value == right_value:
-    #     log.logger.info(f"{middle_search_list}区间内第一个元素和最后一个的结果相同，请确认区间范围")
-    #     return None               
+    if left_value == right_value:
+        log.logger.info(f"{middle_search_list}区间内第一个元素和最后一个的结果相同，请确认区间范围")
+        return None               
     while left <= right -2 :
         middle = (left + right )//2 
         count += 1 
@@ -430,7 +364,8 @@ def middle_search(repo,middle_search_list,Pc,Pc_info,branch):
         elif mid_value != None and mid_value == right_value:
             right = middle 
     log.logger.info(f"总共{count}次查找\n\n定位到问题引入范围是：\"{middle_search_list[left]}\"(不发生)-\"{middle_search_list[right]}\"(发生)之间引入") 
-    return middle_search_list[left:right]
+   
+    return middle_search_list[left:right+1]
 
 def run():
     config = Config()
@@ -449,6 +384,7 @@ def run():
     print(f"{branch=}")
     print(f"{Pc_info.os_type=}")
     deb_info_obj = deb_info(branch,begin_date, end_date,Pc_info)
+    # print(deb_info_obj.get_deb_version_from_date() )
     if component and commit_list:
         commit_list = deb_info_obj.get_commits_from_commit(component,commit_list)
         rs = middle_search(component,commit_list,sshClient_obj,Pc_info,branch)
@@ -457,8 +393,9 @@ def run():
     else:
         # 获取deb 列表 
         driver_list = deb_info_obj.get_deb_version_from_date() 
-        print(f"{driver_list=}")
-        deb_rs_list = middle_search('deb',commit_list,sshClient_obj,Pc_info,branch)
+        # print(f"{driver_list=}")
+        deb_rs_list = middle_search('deb',driver_list,sshClient_obj,Pc_info,branch)
+        print(f"{deb_rs_list=}")
         umd_search_list, kmd_search_list = deb_info_obj.get_UMD_KMD_commit_from_deb(deb_rs_list)
         print(f"{umd_search_list=}\n{kmd_search_list=}")
         if not middle_search('umd',umd_search_list,sshClient_obj,Pc_info,branch): 
@@ -469,20 +406,37 @@ if __name__ == "__main__":
     branch = 'develop'
     begin_date = '20240711'
     end_date = '20240712'
-    # Test_Host_IP = '192.168.115.207'
-    # Host_name = 'swqa'
-    # passwd = 'gfx123456'
-    Test_Host_IP = '192.168.2.131'
-    Host_name = 'georgy'
-    passwd = '123456'
-    Pc = sshClient.sshClient(Test_Host_IP,Host_name,passwd)
-    rs = Pc_Info(Pc)
-    print(f"{rs.arch=}")
+    Test_Host_IP = '192.168.114.213'
+    Host_name = 'swqa'
+    passwd = 'gfx123456'
+    # Test_Host_IP = '192.168.2.131'
+    # Host_name = 'georgy'
+    # passwd = '123456'
+    sshClient_obj = sshClient.sshClient(Test_Host_IP,Host_name,passwd)
+    Pc_info = Pc_Info(sshClient_obj)
     print(f"{Config().commit_list}")
+    deb_info_obj = deb_info(branch,begin_date, end_date,Pc_info)
         # commit = 'b6ba94c99'
         # install_umd(commit,Pc,glvnd,os_type,arch,architecture,dm_type,kernel_version, exec_user)
         # commit = 'd8cb481ab'
         # install_kmd('d8cb481ab',Pc,glvnd,os_type,arch,architecture,dm_type,kernel_version, exec_user)
-    # deb_list = ['musa_2024.07.11-D+375','musa_2024.07.12-D+378']
-    # umd_search_list,kmd_search_list = get_commit_from_deb(deb_list,branch,arch,glvnd)
+    deb_list = ['musa_2024.07.11-D+375','musa_2024.07.12-D+378']
+    # umd_search_list,kmd_search_list = deb_info_obj.get_UMD_KMD_commit_from_deb(deb_list)
     # print(f"{umd_search_list=}\n{kmd_search_list=}")
+    commit = 'b6ba94c99'
+    # glvnd,arch,dm_type,exec_user,kernel_version = Pc_info.glvnd,Pc_info.arch,Pc_info.dm_type,Pc_info.exec_user,Pc_info.kernel_version
+    # install_umd(commit,Pc,branch,glvnd,arch,dm_type,exec_user)
+    commit = 'd8cb481ab'
+    # install_kmd(commit,Pc,branch,arch,dm_type,kernel_version, exec_user)
+    # Driver_Installer(Pc,Pc_info,branch).install_deb('musa_2024.07.12-D+378')
+    # s = Driver_Installer(Pc,Pc_info,branch).get_display_var()
+    # print(s)
+    umd_search_list=['7c8ea64e7', 'c68ec3906', '8db1b23d7', 'f10b58fe3', '2c07d853c', '6620adaa2', 'b6ba94c99']
+    # ['7c8ea64e7', 'c68ec3906', '8db1b23d7', 'f10b58fe3', '2c07d853c', '6620adaa2', 'b6ba94c99']
+    kmd_search_list=['c8c2488d3', 'd8b640314', 'e60ecbddd', 'd8cb481ab', 'b7e13d6eb', '9f34703f6', '2b9f60a46', 'e8110b2a3', 'a5a0caf42', 'e81d96b5d']
+    commit_list = ['7c8ea64e7', 'b6ba94c99']
+    component = 'umd'
+    commit_list = deb_info_obj.get_commits_from_commit(component,commit_list)
+    rs = middle_search(component,commit_list,sshClient_obj,Pc_info,branch)
+    if not rs:
+        print(f"{component} {commit_list}无法确定问题引入范围.")

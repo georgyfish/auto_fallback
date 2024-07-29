@@ -58,13 +58,13 @@ class deb_info:
             else:
                 work_date = re.search(r"\d{4}.\d{2}.\d{2}",commit)
                 work_date = work_date.group()
-                work_date = datetime.datetime.strptime(work_date, "%Y.%m.%d").strftime(work_date, "%Y%m%d")
-             
+                work_date = datetime.datetime.strptime(work_date, "%Y.%m.%d").strftime("%Y%m%d")
                 driver_name = f"{commit}+dkms+{glvnd}-{os_type}_{architecture}.deb"
                 driver_name_pc = f"{commit}+dkms+{glvnd}-pc_{architecture}.deb"
-                url = f"https://oss.mthreads.com/product-release/{branch}/{work_date}/{driver_name}"
+                url_os_type = f"https://oss.mthreads.com/product-release/{branch}/{work_date}/{driver_name}"
                 url_pc = f"https://oss.mthreads.com/product-release/{branch}/{work_date}/{driver_name_pc}"
-                urls = [url,url_pc]
+                urls = [url_pc,url_os_type]
+                print(f"{urls=}")
                 # # 20240708后使用pc deb测试
                 # if work_date.strptime(work_date, "%Y%m%d") > datetime.datetime.strptime("20240708","%Y%m%d"):
                 #     driver_name = f"{commit}+dkms+{glvnd}-pc_{architecture}.deb"
@@ -78,10 +78,11 @@ class deb_info:
                     self.log.logger.error(f"URL {url} is not accessible.")
             if not file_found:
                 remove_result.append(commit)
+        if remove_result:
             self.log.logger.info(f"因oss地址不存在移除{repo}列表{remove_result}")
-            return result
+        return result
 
-    # 通过日期列表获取 驱动版本列表
+    # 通过日期列表、daily_build获取 驱动版本列表
     def get_deb_version_from_date(self):
         result = []
         remove_result = [] 
@@ -89,7 +90,7 @@ class deb_info:
         # 先尝试获取daily_build_pc.txt，再尝试daily_build.txt
         for work_date in self.work_date_list:
             file_found = False
-            work_date_date = datetime.datetime.strptime(work_date,"%Y%m%d")
+            # work_date_date = datetime.datetime.strptime(work_date,"%Y%m%d")
             for daily_build_txt in daily_build_txts:
                 url = f'https://oss.mthreads.com/product-release/{self.branch}/{work_date}/{daily_build_txt}' 
                 try:
@@ -106,7 +107,8 @@ class deb_info:
                 result.append(driver)
             if not file_found:
                 remove_result.append(work_date)
-        self.log.logger.info(f"因oss daily_build地址不存在移除 {remove_result}")
+        if remove_result:
+            self.log.logger.info(f"因oss daily_build地址不存在移除 {remove_result}")
         result = self.Check_Driver_URL('deb',result)
         return result
 
@@ -114,7 +116,7 @@ class deb_info:
     def check_url(self,url):
         try:
             responce = requests.get(url)
-            if responce.status_code == '200':
+            if responce.status_code == 200:
                 return True
             else:
                 return False
@@ -142,7 +144,6 @@ class deb_info:
     # 通过deb_info.txt获取commit信息
     def get_UMD_KMD_commit_from_deb_info(self,deb_list):
         branch = self.branch
-
         gr_umd_start_end = []
         gr_kmd_start_end = []
         for deb in deb_list:
@@ -153,8 +154,18 @@ class deb_info:
             url = f"https://oss.mthreads.com/porduct-release/{branch}/{deb}_info.txt"
             response = requests.get(url)
             response.raise_for_status()
-            response.text.splitlines()
-        pass
+            tmp_list = response.text.splitlines()
+            for tmp in tmp_list:
+                key = tmp.split(':')[0]
+                value = tmp.split(':')[1]
+                if key == 'kmd':
+                    kmd_commit = value
+                if key == 'umd':
+                    umd_commit = value
+            gr_umd_start_end.append(umd_commit)
+            gr_kmd_start_end.append(kmd_commit)
+        self.log.logger.info(f"{gr_umd_start_end=}\n{gr_kmd_start_end=}\n")
+        return gr_umd_start_end,gr_kmd_start_end
 
     # 通过deb日期 repo_tag获取commit信息
     # 两版deb驱动，分别根据repo_tag.txt获取2笔UMD、2笔KMD区间
@@ -164,35 +175,36 @@ class deb_info:
     # 检查每个commit的URL，过滤无法下载的；
     def get_UMD_KMD_commit_from_deb(self,deb_list):
         branch = self.branch
-        gr_umd_start_end = []
-        gr_kmd_start_end = []
-        for deb in deb_list:
-            deb_date = re.search(r'\d{4}\.\d{2}\.\d{2}',deb).group()
-            self.log.logger.info(f"{deb_date=}")
-            deb_date = datetime.datetime.strptime(deb_date,"%Y.%m.%d").strftime("%Y%m%d")
-            url = f"https://oss.mthreads.com/release-ci/repo_tags/{deb_date}.txt"
-            self.log.logger.info(f"curl {url}")
-            try:
-                rs = subprocess.run(['curl', url], capture_output=True, text=True, check=True)
-                repo_tag_dict = eval(rs.stdout)
-                self.log.logger.info(f"{repo_tag_dict=}")
-                # response = requests.get(url)
-                # json_obj = response.json()
-                # gr_umd_start_end.append(json_obj['gr-umd'][branch])
-                # gr_kmd_start_end.append(json_obj['gr-kmd'][branch])
-                gr_umd_start_end.append(repo_tag_dict['gr-umd'][branch])
-                gr_kmd_start_end.append(repo_tag_dict['gr-kmd'][branch])
-            except subprocess.CalledProcessError as e:
-                self.log.logger.error(f"Error:\n{e.stderr}")
-            except Exception as e:
-                self.log.logger.error(f"An unexpected error occurred: \n{e}")
-        self.log.logger.info(f"{gr_umd_start_end=}\n{gr_kmd_start_end=}\n")
+        gr_umd_start_end,gr_kmd_start_end = self.get_UMD_KMD_commit_from_deb_info(deb_list)
+        # gr_umd_start_end = []
+        # gr_kmd_start_end = []
+        # for deb in deb_list:
+        #     deb_date = re.search(r'\d{4}\.\d{2}\.\d{2}',deb).group()
+        #     self.log.logger.info(f"{deb_date=}")
+        #     deb_date = datetime.datetime.strptime(deb_date,"%Y.%m.%d").strftime("%Y%m%d")
+        #     url = f"https://oss.mthreads.com/release-ci/repo_tags/{deb_date}.txt"
+        #     self.log.logger.info(f"curl {url}")
+        #     try:
+        #         # response = requests.get(url)
+        #         # json_obj = response.json()
+        #         # gr_umd_start_end.append(json_obj['gr-umd'][branch])
+        #         # gr_kmd_start_end.append(json_obj['gr-kmd'][branch])
+        #         rs = subprocess.run(['curl', url], capture_output=True, text=True, check=True)
+        #         repo_tag_dict = eval(rs.stdout)
+        #         self.log.logger.info(f"{repo_tag_dict=}")
+        #         gr_umd_start_end.append(repo_tag_dict['gr-umd'][branch])
+        #         gr_kmd_start_end.append(repo_tag_dict['gr-kmd'][branch])
+        #     except subprocess.CalledProcessError as e:
+        #         self.log.logger.error(f"Error:\n{e.stderr}")
+        #     except Exception as e:
+        #         self.log.logger.error(f"An unexpected error occurred: \n{e}")
+        # self.log.logger.info(f"{gr_umd_start_end=}\n{gr_kmd_start_end=}\n")
         begin_date = re.search(r"\d{4}.\d{2}.\d{2}",deb_list[0]).group()
         end_date = re.search(r"\d{4}.\d{2}.\d{2}",deb_list[1]).group()
         previous_day = datetime.datetime.strptime(begin_date,"%Y.%m.%d") - datetime.timedelta(days=1)
         # 设置开始时间为前一天12:00，结束时间为当天的23:00
         commit_begin_date = previous_day.replace(hour=12, minute=0, second=0).strftime("%Y-%m-%d %H:%M:%S")
-        commit_end_date = datetime.strptime(end_date,"%Y.%m.%d").replace(hour=23,minute=0,second=0).strftime("%Y-%m-%d %H:%M:%S")
+        commit_end_date = datetime.datetime.strptime(end_date,"%Y.%m.%d").replace(hour=23,minute=0,second=0).strftime("%Y-%m-%d %H:%M:%S")
         # 格式化输出
         self.log.logger.info(f"commit查询开始时间：{commit_begin_date}\ncommit查询结束时间：{commit_end_date}\n")    
         umd_list = self.get_commits_from_date("gr-umd", commit_begin_date , commit_end_date)
@@ -241,9 +253,9 @@ class deb_info:
     # git show {commit}
     def get_commits_from_commit(self,component,commit_list):
         end_date = datetime.datetime.today() + datetime.timedelta(1)
-        end_date = datetime.datetime.strftime(end_date,"%Y-%m-%d %H:%M:%S")
-        begin_date = datetime.datetime.strptime(end_date, "%Y-%m-%d %H:%M:%S") - datetime.timedelta(365)
-        begin_date = datetime.datetime.strftime(begin_date,"%Y-%m-%d %H:%M:%S")
+        begin_date = end_date - datetime.timedelta(365)
+        end_date = end_date.strftime("%Y-%m-%d %H:%M:%S")
+        begin_date = begin_date.strftime("%Y-%m-%d %H:%M:%S")
         if component == 'umd':
             umd_list = self.get_commits_from_date("gr-umd", begin_date , end_date)
             umd_search_list = self.Check_Driver_URL("umd",self.slice_full_list(commit_list,umd_list))
@@ -298,7 +310,8 @@ class deb_info:
 
 
 if __name__ == '__main__':
-    pass
+    deb_info = deb_info()
+    print(deb_info.get_git_commit_info("gr-umd", "develop", "2024-06-24 12:00:00", "2024-06-25 23:00:00"))
     # Pc_info = 
     # deb_list = deb_info('develop','20240701', '20240724',)
     # driver_full_list = deb_list.get_deb_version()
