@@ -4,6 +4,7 @@ import subprocess
 from logManager import logManager
 import requests
 from bs4 import BeautifulSoup
+import urllib.parse
 
 class deb_info:
     def __init__(self,branch,begin_date,end_date,Pc_info):
@@ -35,7 +36,7 @@ class deb_info:
         # print(work_date_list)
         return work_date_list
 
-    def Check_Driver_URL(self,repo,check_list):
+    def Check_Driver_URL(self,repo,check_list,pc_list=None):
         branch,arch,glvnd,os_type,architecture = (
             self.branch,
             self.arch,
@@ -51,57 +52,62 @@ class deb_info:
                 url = f"http://oss.mthreads.com/release-ci/gr-umd/{branch}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.tar.gz"
                 if glvnd:
                     url = f"http://oss.mthreads.com/release-ci/gr-umd/{branch}/{commit}_{arch}-mtgpu_linux-xorg-release-hw-{glvnd}.tar.gz"
-                urls = [url]
+                # urls = [url]
             elif repo == 'kmd':
                 url = f"http://oss.mthreads.com/sw-build/gr-kmd/{branch}/{commit}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.deb"
-                urls = [url]
+                # urls = [url]
             else:
+                # pc包和非pc包
+                driver_name = f"{commit}+dkms+{glvnd}-{os_type}_{architecture}.deb"
+                if pc_list:
+                    pc = pc_list[check_list.index(commit)]
+                    if pc == 'pc':
+                        driver_name = f"{commit}+dkms+{glvnd}-{pc}_{architecture}.deb"
                 work_date = re.search(r"\d{4}.\d{2}.\d{2}",commit)
                 work_date = work_date.group()
                 work_date = datetime.datetime.strptime(work_date, "%Y.%m.%d").strftime("%Y%m%d")
-                driver_name = f"{commit}+dkms+{glvnd}-{os_type}_{architecture}.deb"
-                driver_name_pc = f"{commit}+dkms+{glvnd}-pc_{architecture}.deb"
-                url_os_type = f"https://oss.mthreads.com/product-release/{branch}/{work_date}/{driver_name}"
-                url_pc = f"https://oss.mthreads.com/product-release/{branch}/{work_date}/{driver_name_pc}"
-                urls = [url_pc,url_os_type]
-                print(f"{urls=}")
-                # # 20240708后使用pc deb测试
-                # if work_date.strptime(work_date, "%Y%m%d") > datetime.datetime.strptime("20240708","%Y%m%d"):
-                #     driver_name = f"{commit}+dkms+{glvnd}-pc_{architecture}.deb"
-                # url = f"https://oss.mthreads.com/product-release/{branch}/{work_date}/{driver_name}"
-            for url in urls:
-                if self.check_url(url):
-                    result.append(commit)
-                    file_found = True
-                    break
-                else:
-                    self.log.logger.error(f"URL {url} is not accessible.")
+                url = f"https://oss.mthreads.com/product-release/{branch}/{work_date}/{driver_name}"
+            if self.check_url(url):
+                result.append(commit)
+                file_found = True
+            else:
+                self.log.logger.error(f"URL {url} is not accessible.")
             if not file_found:
                 remove_result.append(commit)
         if remove_result:
             self.log.logger.info(f"因oss地址不存在移除{repo}列表{remove_result}")
+        print(result)
         return result
 
     # 通过日期列表、daily_build获取 驱动版本列表
     def get_deb_version_from_date(self):
         result = []
         remove_result = [] 
+        pc_list = []
         daily_build_txts = ['daily_build_pc.txt', 'daily_build.txt']
         # 先尝试获取daily_build_pc.txt，再尝试daily_build.txt
         for work_date in self.work_date_list:
             file_found = False
-            # work_date_date = datetime.datetime.strptime(work_date,"%Y%m%d")
+            pc = None
+            driver = None
             for daily_build_txt in daily_build_txts:
                 url = f'https://oss.mthreads.com/product-release/{self.branch}/{work_date}/{daily_build_txt}' 
                 try:
                     response = requests.get(url)
                     response.raise_for_status()  # 如果响应不是200，则会抛出异常
                     driver = response.text.splitlines()[0]
-                    print(f"成功获取文件：{daily_build_txt}")
+                    self.log.logger.info(f"成功获取文件：{daily_build_txt}")
+                    # 如果是pc的包，添加pc标签
+                    if daily_build_txt == 'daily_build_pc.txt':
+                        pc = 'pc'
+                    else:
+                        pc = 'os_type'
                     file_found = True
                     break  # 获取成功则退出循环
                 except requests.exceptions.RequestException as e:
-                    print(f"未能获取文件：{daily_build_txt}，错误信息：{e}")
+                    self.log.logger.error(f"未能获取文件：{daily_build_txt}，错误信息：{e}")
+            if pc:
+                pc_list.append(pc)
             if driver is not None:
                 self.log.logger.info(f"{driver=}")
                 result.append(driver)
@@ -109,8 +115,10 @@ class deb_info:
                 remove_result.append(work_date)
         if remove_result:
             self.log.logger.info(f"因oss daily_build地址不存在移除 {remove_result}")
-        result = self.Check_Driver_URL('deb',result)
-        return result
+        # print(f"{result=}")
+        # print(f"{pc_list=}")
+        result = self.Check_Driver_URL('deb',result,pc_list)
+        return result,pc_list
 
     # 检查url 响应状态码是否是200
     def check_url(self,url):
@@ -144,25 +152,36 @@ class deb_info:
     def get_commit_from_deb_info(self,deb_version):
         branch = self.branch
         deb_date = re.search(r'\d{4}\.\d{2}\.\d{2}',deb_version).group()
-        self.log.logger.info(f"{deb_date=}")
         deb_date = datetime.datetime.strptime(deb_date,"%Y.%m.%d").strftime("%Y%m%d")
-        # info.txt 需确认下具体格式
-        url = f"https://oss.mthreads.com/porduct-release/{branch}/{deb_version}_info.txt"
+        # 
+        deb_version = deb_info.url_encode(deb_version)
+        url = f"https://oss.mthreads.com/product-release/{branch}/{deb_date}/{deb_version}_info.txt"
+        # url = os.path.join("https://oss.mthreads.com/product-release/",branch,deb_date,name)
+        #url需要转换编码为urlencode
+        # requests.get需要认证，暂时会报错，使用curl获取
         response = requests.get(url)
         response.raise_for_status()
-        tmp_list = response.text.splitlines()
-        for tmp in tmp_list:
-            key = tmp.split(':')[0]
-            value = tmp.split(':')[1]
+        commit_list = response.text.splitlines()
+        for commit in commit_list:
+            key = commit.split(':')[0]
+            value = commit.split(':')[1]
             if key == 'kmd':
-                kmd_commit = value
+                # 去除开头的空格
+                kmd_commit = value.lstrip()
             if key == 'umd':
-                umd_commit = value
+                umd_commit = value.lstrip()
+        # print(umd_commit,kmd_commit)
+        self.log.logger.info(f"{deb_date=}\n{umd_commit=}\t{kmd_commit=}")
         return umd_commit,kmd_commit
+    
+    @staticmethod
+    def url_encode(string):
+        # 使用 quote 方法进行 URL 编码
+        encoded_string = urllib.parse.quote(string, safe='')
+        return encoded_string
 
     # 通过deb_info.txt获取commit信息
     def get_UMD_KMD_commit_from_deb_info(self,deb_list):
-        branch = self.branch
         gr_umd_start_end = []
         gr_kmd_start_end = []
         for deb_version in deb_list:
@@ -265,76 +284,6 @@ class deb_info:
             self.log.logger.info(f"{kmd_search_list=}\n")
             return kmd_search_list
 
-        #     if work_date_date > datetime.datetime.strptime("20240708","%Y%m%d"):
-                
-        #         for file_name in files_to_try:
-        #             url = f'https://oss.mthreads.com/product-release/{self.branch}/{work_date}/{file_name}' 
-                    
-        #             try:
-        #                 # if self.check_url(url)
-        #                 response = requests.get(url)
-        #                 response.raise_for_status()  # 如果响应不是200，则会抛出异常
-        #                 driver = response.text.splitlines()[0]
-        #                 self.log.logger.info(f"{driver=}")
-        #                 result.append(driver)
-        #                 print(f"成功获取文件：{file_name}")
-        #                 break  # 获取成功则退出循环
-        #             except requests.exceptions.RequestException as e:
-        #                 print(f"未能获取文件：{file_name}，错误信息：{e}")
-        #         # url = f"https://oss.mthreads.com/product-release/{self.branch}/{work_date}/daily_build_pc.txt"
-        #     else:
-        #         url = f"https://oss.mthreads.com/product-release/{self.branch}/{work_date}/daily_build.txt"
-        #     if self.check_url(url):
-        #         self.log.logger.info(f"curl {url}")
-        #         try:
-        #             rs = subprocess.run(['curl',url], capture_output=True, text=True, check=True)
-        #             driver = rs.stdout.splitlines()[0]
-        #             self.log.logger.info(f"{driver=}")
-        #             result.append(driver)
-
-        #         except subprocess.CalledProcessError as e:
-        #         # 打印错误信息
-        #             self.log.logger.error(f"Error:\n{e.stderr}")
-        #         except Exception as e:
-        #         # 处理其他异常
-        #             self.log.logger.error(f"An unexpected error occurred: {e}")
-        #     else:
-        #         self.log.logger.error(f"URL {url} is not accessible.")
-        #         remove_result.append(work_date_date)
-        #     self.log.logger.info(f"因oss地址不存在移除daily_build {remove_result}")
-
-        #     result = self.Check_Driver_URL(self,'deb',result)
-        # return result
-
-
 if __name__ == '__main__':
     deb_info = deb_info()
     print(deb_info.get_git_commit_info("gr-umd", "develop", "2024-06-24 12:00:00", "2024-06-25 23:00:00"))
-    # Pc_info = 
-    # deb_list = deb_info('develop','20240701', '20240724',)
-    # driver_full_list = deb_list.get_deb_version()
-    # print(driver_full_list)
-    # 示例 URL
-    # url = "https://oss.mthreads.com/product-release/develop/20240625/daily_build.txt"
-    # 73ab64766
-    # url = "http://oss.mthreads.com/release-ci/gr-umd/develop/73ab64766_x86_64-mtgpu_linux-xorg-release-hw-glvnd.tar.gz"
-    # if check_url(url):
-    #     print(f"The URL {url} is valid and accessible.")
-    # else:
-    #     print(f"The URL {url} is not accessible.")
-    # log = logManager('get_deb_version')
-    # result = []
-    # try:
-    #     rs = subprocess.run(['curl', "https://mirror.ghproxy.com/https://raw.githubusercontent.com/georgyfish/test_script/main/1.txt"], capture_output=True, text=True, check=True)
-    #     # print("Output:", rs.stdout)
-    #     stdout_list = rs.stdout.splitlines()
-    #     log.logger.info(f"{stdout_list=}")
-    #     result.append(stdout_list)
-    # except subprocess.CalledProcessError as e:
-    # # 打印错误信息
-    #     # print("Error:\n", e.stderr)
-    #     log.logger.error(f"Error:\n{e.stderr}")
-    # except Exception as e:
-    # # 处理其他异常
-    #     print(f"An unexpected error occurred: {e}")
-    # print(result)
