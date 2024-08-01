@@ -6,6 +6,7 @@ from datetime import datetime, timezone, timedelta
 from logManager import logManager
 import argparse
 from get_deb import deb_info
+from tabulate import tabulate
 
 log = logManager('common')
 
@@ -327,6 +328,11 @@ def wget_url(client,url,destination_folder,file_name=None):
         log.logger.info(f"Download {url} success !!!")
         return True
 
+def func(repo,data):
+    headers = [repo, "Version/Commit", "result"]
+    table = tabulate(data, headers=headers, tablefmt="grid")
+    print(table)
+    return table
 
 def install_driver(repo,driver,Pc,Pc_info,branch,pc=None):
     driver_instller = Driver_Installer(Pc,Pc_info,branch)
@@ -339,6 +345,8 @@ def install_driver(repo,driver,Pc,Pc_info,branch,pc=None):
     if not rs: 
         print(f"{repo} install fail.")
         sys.exit(-1)
+    # 安装完成，打印查找进度
+    # func(repo,data)
     return testcase()
 
 def testcase():
@@ -347,6 +355,9 @@ def testcase():
 
 # 二分查找
 def middle_search(repo,middle_search_list,Pc,Pc_info,branch,pc_list=None):
+    data  = []
+    for driver in middle_search_list:
+        data.append([driver,''])
     # left、right初始值为列表元素的序号index 最小值和最大值
     left = 0 
     right = len(middle_search_list) - 1
@@ -367,6 +378,8 @@ def middle_search(repo,middle_search_list,Pc,Pc_info,branch,pc_list=None):
     while left <= right -2 :
         middle = (left + right )//2 
         count += 1 
+        # 查找进度打印
+        print(f"继续安装{middle_search_list[middle]}")
         if repo == 'deb' and pc_list:
             mid_value = install_driver(repo,middle_search_list[middle],Pc,Pc_info,branch,pc_list[middle])
         else:
@@ -400,18 +413,21 @@ def run():
         commit_list = deb_info_obj.get_commits_from_commit(component,commit_list)
         rs = middle_search(component,commit_list,sshClient_obj,Pc_info,branch)
         if not rs:
-            print(f"{component} {commit_list}无法确定问题引入范围.")
+            log.logger.error(f"{component} {commit_list}无法确定问题引入范围.")
     else:
         # 获取deb 列表 
         driver_list,pc_list = deb_info_obj.get_deb_version_from_date() 
-        print(f"{driver_list=}")
-        print(f"{pc_list}")
+        log.logger.info(f"{driver_list=}")
+        log.logger.info(f"{pc_list}")
         deb_rs_list = middle_search('deb',driver_list,sshClient_obj,Pc_info,branch,pc_list)
-        print(f"{deb_rs_list=}")
+        log.logger.info(f"deb回退结果为：\"{deb_rs_list[-1]}\"引入")
         umd_search_list, kmd_search_list = deb_info_obj.get_UMD_KMD_commit_from_deb(deb_rs_list)
-        print(f"{umd_search_list=}\n{kmd_search_list=}")
-        if not middle_search('umd',umd_search_list,sshClient_obj,Pc_info,branch): 
-            middle_search('kmd',kmd_search_list,sshClient_obj,Pc_info,branch)
+        log.logger.info(f"{umd_search_list=}\n{kmd_search_list=}")
+        umd_result = middle_search('umd',umd_search_list,sshClient_obj,Pc_info,branch)
+        if not umd_result: 
+            kmd_result = middle_search('kmd',kmd_search_list,sshClient_obj,Pc_info,branch)
+        else:
+            log.logger.info(f"umd 回退结果为：commitID \"{kmd_result[-1]}\"引入")
 
 
 if __name__ == "__main__":

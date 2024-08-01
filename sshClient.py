@@ -16,6 +16,7 @@ class sshClient():
         self.user = username      #验证的用户名
         self.passwd = password
         self.login()      #验证的用户密码
+        self.info = self.get_pc_info()
 
     def login(self, timeout=10):
         
@@ -90,9 +91,31 @@ class sshClient():
         self.log.logger.info(f"Close connect '{self.host}/{self.port}'")
         self.close()
 
+    def get_pc_info(self):
+        result = {}
+        commands = {
+        "os_type": "cat /etc/lsb-release | head -n 1 | awk -F '='  '{print $2}'",
+        "architecture": "dpkg --print-architecture",
+        "arch":"uname -m" ,
+        "kernel_version": "uname -r",
+        "dm_type" : r"systemctl status display-manager.service|grep 'Main PID'  |grep -oP '\(\K[^)]+'",
+        "exec_user" : "ps -ef |grep '/lib/systemd/systemd --user'|grep -v grep|awk -F' ' '{print $1}'|grep -vE 'lightdm|gdm'"
+        }
+        for key,command in commands.items():
+            result[key] = self.execute(command)[0]
+        result['glvnd'] = 'glvnd'
+        if result['arch'] == 'aarch64':
+            result['arch'] = 'arm64'
+        return result
+
 if __name__ == '__main__':
     Pc = sshClient("192.168.114.55","swqa","gfx123456")
     # if 1000 == Pc.login():
-    Umd_Version = Pc.execute("export DISPLAY=:0.0 && glxinfo -B |grep -i 'OpenGL version string'|grep -oP '\\b[0-9a-f]{9}\\b(?=@)'")[0]
+    display_var = Pc.execute("w -h  | awk '{print $3}'|grep -o '^:[0-9]\+' |head -n 1")[0]
+    # Umd_Version = Pc.execute(f"export DISPLAY={display_var} && glxinfo -B |grep -i 'OpenGL version string'|grep -oP '\\b[0-9a-f]{9}\\b(?=@)'")[0]
+    Umd_Version = Pc.execute(f"export DISPLAY={display_var} && glxinfo -B |grep -i 'OpenGL version string'|grep -oP '\\b[0-9a-f]{{9}}\\b(?=@)'")[0]
+    
+    # rs = Pc.execute(f"export DISPLAY= ; xrandr 2>&1")
     print(f"{Umd_Version=}")
+    print(Pc.info)
         # Pc.execute("echo -e /usr/lib/$(uname -m)-linux-gnu/musa |sudo tee /etc/ld.so.conf.d/00-mtgpu.conf")
