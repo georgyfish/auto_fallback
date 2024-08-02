@@ -5,24 +5,25 @@ import sshClient
 from datetime import datetime, timezone, timedelta
 from logManager import logManager
 import argparse
-from get_deb import deb_info
+from get_driver_info import deb_info
 from tabulate import tabulate
 
 log = logManager('common')
 
 class Driver_Installer:
-    def __init__(self,sshClient_obj,Pc_info,branch) -> None:
+    def __init__(self,sshClient_obj,branch) -> None:
         self.log = logManager('Driver Installer')
         self.branch = branch
         self.Pc = sshClient_obj
+        # Pc_info = sshClient_obj.info
         self.glvnd,self.arch,self.os_type,self.architecture,self.exec_user,self.kernel_version,self.dm_type=(
-        Pc_info.glvnd,
-        Pc_info.arch,
-        Pc_info.os_type,
-        Pc_info.architecture,
-        Pc_info.exec_user,
-        Pc_info.kernel_version,
-        Pc_info.dm_type
+        sshClient_obj.info['glvnd'],
+        sshClient_obj.info['arch'],
+        sshClient_obj.info['os_type'],
+        sshClient_obj.info['architecture'],
+        sshClient_obj.info['exec_user'],
+        sshClient_obj.info['kernel_version'],
+        sshClient_obj.info['dm_type']
     )
 
     def install_umd(self,commit):
@@ -279,34 +280,34 @@ class Config:
         if args.branch:
             self.branch = args.branch
 
-class Pc_Info:
-    def __init__(self,Pc):
-        rs = self.get_Pc_info(Pc)
-        self.glvnd,self.os_type,self.arch,self.architecture,self.dm_type,self.kernel_version, self.exec_user= (
-        rs['glvnd'],
-        rs['os_type'],
-        rs['arch'],
-        rs['architecture'],
-        rs['dm_type'],
-        rs['kernel_version'],
-        rs['exec_user']
-    )
-    def get_Pc_info(self,Pc):
-        result = {}
-        commands = {
-        "os_type": "cat /etc/lsb-release | head -n 1 | awk -F '='  '{print $2}'",
-        "architecture": "dpkg --print-architecture",
-        "arch":"uname -m" ,
-        "kernel_version": "uname -r",
-        "dm_type" : r"systemctl status display-manager.service|grep 'Main PID'  |grep -oP '\(\K[^)]+'",
-        "exec_user" : "ps -ef |grep '/lib/systemd/systemd --user'|grep -v grep|awk -F' ' '{print $1}'|grep -vE 'lightdm|gdm'"
-        }
-        for key,command in commands.items():
-            result[key] = Pc.execute(command)[0]
-        result['glvnd'] = 'glvnd'
-        if result['arch'] == 'aarch64':
-            result['arch'] = 'arm64'
-        return result
+# class Pc_Info:
+#     def __init__(self,Pc):
+#         rs = self.get_Pc_info(Pc)
+#         self.glvnd,self.os_type,self.arch,self.architecture,self.dm_type,self.kernel_version, self.exec_user= (
+#         rs['glvnd'],
+#         rs['os_type'],
+#         rs['arch'],
+#         rs['architecture'],
+#         rs['dm_type'],
+#         rs['kernel_version'],
+#         rs['exec_user']
+#     )
+#     def get_Pc_info(self,Pc):
+#         result = {}
+#         commands = {
+#         "os_type": "cat /etc/lsb-release | head -n 1 | awk -F '='  '{print $2}'",
+#         "architecture": "dpkg --print-architecture",
+#         "arch":"uname -m" ,
+#         "kernel_version": "uname -r",
+#         "dm_type" : r"systemctl status display-manager.service|grep 'Main PID'  |grep -oP '\(\K[^)]+'",
+#         "exec_user" : "ps -ef |grep '/lib/systemd/systemd --user'|grep -v grep|awk -F' ' '{print $1}'|grep -vE 'lightdm|gdm'"
+#         }
+#         for key,command in commands.items():
+#             result[key] = Pc.execute(command)[0]
+#         result['glvnd'] = 'glvnd'
+#         if result['arch'] == 'aarch64':
+#             result['arch'] = 'arm64'
+#         return result
 
 def validate_commit(commit):
     commit_pattern = re.compile(r'^[a-z0-9]{9}$')
@@ -328,14 +329,14 @@ def wget_url(client,url,destination_folder,file_name=None):
         log.logger.info(f"Download {url} success !!!")
         return True
 
-def func(repo,data):
-    headers = [repo, "Version/Commit", "result"]
+def print_table(data):
+    headers = ["Version/Commit", "result"]
     table = tabulate(data, headers=headers, tablefmt="grid")
     print(table)
     return table
 
-def install_driver(repo,driver,Pc,Pc_info,branch,pc=None):
-    driver_instller = Driver_Installer(Pc,Pc_info,branch)
+def install_driver(repo,driver,sshclient,branch,pc=None):
+    driver_instller = Driver_Installer(sshclient,branch)
     if repo == 'deb':
         rs = driver_instller.install_deb(driver,pc)
     elif repo == 'umd':
@@ -353,11 +354,13 @@ def testcase():
     rs = input("请手动测试后输入测试结果：pass/fail\n")
     return rs
 
+
 # 二分查找
-def middle_search(repo,middle_search_list,Pc,Pc_info,branch,pc_list=None):
+def middle_search(repo,middle_search_list,sshclient,branch,data,pc_list=None):
     data  = []
     for driver in middle_search_list:
-        data.append([driver,''])
+        data.append([repo,driver,''])
+    print_table(data)
     # left、right初始值为列表元素的序号index 最小值和最大值
     left = 0 
     right = len(middle_search_list) - 1
@@ -366,12 +369,15 @@ def middle_search(repo,middle_search_list,Pc,Pc_info,branch,pc_list=None):
     if repo == 'deb':
         right_value =  "fail"
         if pc_list:
-            left_value = install_driver(repo,middle_search_list[left],Pc,Pc_info,branch,pc_list[left])
+            left_value = install_driver(repo,middle_search_list[left],sshclient,branch,pc_list[left])
         else:
-            left_value = install_driver(repo,middle_search_list[left],Pc,Pc_info,branch)
+            left_value = install_driver(repo,middle_search_list[left],sshclient,branch)
     else:
-        left_value = install_driver(repo,middle_search_list[left],Pc,Pc_info,branch)
-        right_value = install_driver(repo,middle_search_list[right],Pc,Pc_info,branch)
+        left_value = install_driver(repo,middle_search_list[left],sshclient,branch)
+        right_value = install_driver(repo,middle_search_list[right],sshclient,branch)
+    data[left][-1] = left_value
+    data[right][-1] = right_value
+    print_table(data)
     if left_value == right_value:
         log.logger.info(f"{middle_search_list}区间内第一个元素和最后一个的结果相同，请确认区间范围")
         return None               
@@ -381,9 +387,11 @@ def middle_search(repo,middle_search_list,Pc,Pc_info,branch,pc_list=None):
         # 查找进度打印
         print(f"继续安装{middle_search_list[middle]}")
         if repo == 'deb' and pc_list:
-            mid_value = install_driver(repo,middle_search_list[middle],Pc,Pc_info,branch,pc_list[middle])
+            mid_value = install_driver(repo,middle_search_list[middle],sshclient,branch,pc_list[middle])
         else:
-            mid_value = install_driver(repo,middle_search_list[middle],Pc,Pc_info,branch)
+            mid_value = install_driver(repo,middle_search_list[middle],sshclient,branch)
+        data[middle][-1] = mid_value
+        print_table(data)
         if mid_value != None and mid_value == left_value:
             left = middle 
         elif mid_value != None and mid_value == right_value:
@@ -404,51 +412,58 @@ def run():
     config.commit_list
     )
     sshClient_obj = sshClient.sshClient(Test_Host_IP,Host_name,passwd)
-    Pc_info = Pc_Info(sshClient_obj)
+    pc_info = sshClient_obj.info
     # print(f"{branch=}")
-    # print(f"{Pc_info.os_type=}")
-    deb_info_obj = deb_info(branch,begin_date, end_date,Pc_info)
+    print(f"{pc_info=}")
+    deb_info_obj = deb_info(branch,begin_date, end_date,pc_info)
+    # driver_list,pc_list = deb_info_obj.get_deb_version_from_date()
+
+    deb_list = ['musa_2024.07.11-D+375','musa_2024.07.12-D+378']
+    umd_search_list, kmd_search_list = deb_info_obj.get_UMD_KMD_commit_from_deb(deb_list)
+    print(umd_search_list,kmd_search_list)
+
     # print(deb_info_obj.get_deb_version_from_date() )
-    if component and commit_list:
-        commit_list = deb_info_obj.get_commits_from_commit(component,commit_list)
-        rs = middle_search(component,commit_list,sshClient_obj,Pc_info,branch)
-        if not rs:
-            log.logger.error(f"{component} {commit_list}无法确定问题引入范围.")
-    else:
-        # 获取deb 列表 
-        driver_list,pc_list = deb_info_obj.get_deb_version_from_date() 
-        log.logger.info(f"{driver_list=}")
-        log.logger.info(f"{pc_list}")
-        deb_rs_list = middle_search('deb',driver_list,sshClient_obj,Pc_info,branch,pc_list)
-        log.logger.info(f"deb回退结果为：\"{deb_rs_list[-1]}\"引入")
-        umd_search_list, kmd_search_list = deb_info_obj.get_UMD_KMD_commit_from_deb(deb_rs_list)
-        log.logger.info(f"{umd_search_list=}\n{kmd_search_list=}")
-        umd_result = middle_search('umd',umd_search_list,sshClient_obj,Pc_info,branch)
-        if not umd_result: 
-            kmd_result = middle_search('kmd',kmd_search_list,sshClient_obj,Pc_info,branch)
-        else:
-            log.logger.info(f"umd 回退结果为：commitID \"{kmd_result[-1]}\"引入")
+    # if component and commit_list:
+    #     commit_list = deb_info_obj.get_commits_from_commit(component,commit_list)
+    #     rs = middle_search(component,commit_list,sshClient_obj,Pc_info,branch)
+    #     if not rs:
+    #         log.logger.error(f"{component} {commit_list}无法确定问题引入范围.")
+    # else:
+    #     # 获取deb 列表 
+    #     driver_list,pc_list = deb_info_obj.get_deb_version_from_date() 
+    #     log.logger.info(f"{driver_list=}")
+    #     log.logger.info(f"{pc_list}")
+    #     deb_rs_list = middle_search('deb',driver_list,sshClient_obj,Pc_info,branch,pc_list)
+    #     log.logger.info(f"deb回退结果为：\"{deb_rs_list[-1]}\"引入")
+    #     umd_search_list, kmd_search_list = deb_info_obj.get_UMD_KMD_commit_from_deb(deb_rs_list)
+    #     log.logger.info(f"{umd_search_list=}\n{kmd_search_list=}")
+    #     umd_result = middle_search('umd',umd_search_list,sshClient_obj,Pc_info,branch)
+    #     if not umd_result: 
+    #         kmd_result = middle_search('kmd',kmd_search_list,sshClient_obj,Pc_info,branch)
+    #     else:
+    #         log.logger.info(f"umd 回退结果为：commitID \"{kmd_result[-1]}\"引入")
 
 
 if __name__ == "__main__":
-    branch = 'develop'
-    begin_date = '20240711'
-    end_date = '20240712'
-    Test_Host_IP = '192.168.114.55'
-    Host_name = 'swqa'
-    passwd = 'gfx123456'
-    # Test_Host_IP = '192.168.2.131'
-    # Host_name = 'georgy'
-    # passwd = '123456'
-    sshClient_obj = sshClient.sshClient(Test_Host_IP,Host_name,passwd)
-    Pc_info = Pc_Info(sshClient_obj)
-    print(f"{Config().commit_list}")
-    deb_info_obj = deb_info(branch,begin_date, end_date,Pc_info)
-        # commit = 'b6ba94c99'
-        # install_umd(commit,Pc,glvnd,os_type,arch,architecture,dm_type,kernel_version, exec_user)
-        # commit = 'd8cb481ab'
-        # install_kmd('d8cb481ab',Pc,glvnd,os_type,arch,architecture,dm_type,kernel_version, exec_user)
-    deb_list = ['musa_2024.07.11-D+375','musa_2024.07.12-D+378']
+    run()
+    # branch = 'develop'
+    # begin_date = '20240711'
+    # end_date = '20240712'
+    # Test_Host_IP = '192.168.114.55'
+    # Host_name = 'swqa'
+    # passwd = 'gfx123456'
+    # # Test_Host_IP = '192.168.2.131'
+    # # Host_name = 'georgy'
+    # # passwd = '123456'
+    # sshClient_obj = sshClient.sshClient(Test_Host_IP,Host_name,passwd)
+    # pc_info = sshClient_obj.info
+    # print(f"{Config().commit_list}")
+    # deb_info_obj = deb_info(branch,begin_date, end_date,Pc_info)
+    #     # commit = 'b6ba94c99'
+    #     # install_umd(commit,Pc,glvnd,os_type,arch,architecture,dm_type,kernel_version, exec_user)
+    #     # commit = 'd8cb481ab'
+    #     # install_kmd('d8cb481ab',Pc,glvnd,os_type,arch,architecture,dm_type,kernel_version, exec_user)
+    # deb_list = ['musa_2024.07.11-D+375','musa_2024.07.12-D+378']
     # umd_search_list, kmd_search_list = deb_info_obj.get_UMD_KMD_commit_from_deb(deb_list)
     # print(f"{umd_search_list=}\n{kmd_search_list=}")
     # commit = 'b6ba94c99'
@@ -469,4 +484,4 @@ if __name__ == "__main__":
     # # if not rs:
     # #     print(f"{component} {commit_list}无法确定问题引入范围.")
 
-    deb_info_obj.get_commit_from_deb_info('musa_2024.07.11-D+375')
+    # deb_info_obj.get_commit_from_deb_info('musa_2024.07.11-D+375')
