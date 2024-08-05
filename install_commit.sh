@@ -247,7 +247,7 @@ function show_kmd_info() {
             # kmd commit 只显示7位；检查安装成功时只能对比前7位字母数字；
             echo "[INFO] KMD commitID : $kmd_commit"
         else
-            echo "[ERROR] $m not loaded, Please run 'sudo lsmod |grep mtgpu' to check mtgpu.ko is loaded!"
+            echo "[ERROR] $m not loaded, run 'sudo lsmod |grep mtgpu' to check mtgpu.ko is loaded!"
             exit 1
             
         fi
