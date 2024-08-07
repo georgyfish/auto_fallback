@@ -1,12 +1,12 @@
 #!/usr/bin/python3
-import argparse
+import argparse,os,sys
 from datetime import timedelta,datetime 
 import json,re
 
 class Config:
     # file_path = "config.json"
-    def __init__(self,file_path="config.json") :
-        self.file_path=file_path
+    def __init__(self) :
+        self.file_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.json')
         self._config_data = self.read_config()
         self.begin_date,self.end_date = self.get_default_dates()
         self.component = self._config_data.get('component','deb')

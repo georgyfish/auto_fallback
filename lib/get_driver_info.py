@@ -1,11 +1,12 @@
 #!/usr/bin/python3
-import datetime,re,sys
-import subprocess
-from yq.auto_fallback.lib.logManager import logManager
+import datetime,re,sys,os
 import requests
 from bs4 import BeautifulSoup
 import urllib.parse
 
+basedir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(basedir)
+from lib.logManager import logManager
 class deb_info:
     def __init__(self,branch,begin_date,end_date,pc_info):
         self.log = logManager('get_deb_info')

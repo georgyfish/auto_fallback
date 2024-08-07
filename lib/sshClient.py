@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 
-import paramiko,logging,sys,time
+import paramiko,sys,time,os
 from paramiko import AuthenticationException
-from yq.auto_fallback.lib.logManager import logManager
 from paramiko.ssh_exception import SSHException, NoValidConnectionsError
+basedir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(basedir)
+from lib.logManager import logManager
+
 
 class sshClient():
 
