@@ -284,11 +284,17 @@ class deb_info:
             self.log.logger.info(f"因oss地址不存在移除{repo}列表{remove_result}")
         print(result)
         return result
+        
+    # 增加一个需求，根据short_id去找到 完整commitID
+    def get_commitID_from_shortID(short_id):
+        pass
+
 
 if __name__ == '__main__':
-    import yq.auto_fallback.lib.sshClient as sshClient
-    pc_info = sshClient.sshClient("192.168.114.55","swqa","gfx123456").info
-    deb_info = deb_info("develop", "20240711", "20240712",pc_info)
-    # print(deb_info.get_git_commit_info("gr-umd", "develop", "2024-06-24 12:00:00", "2024-06-25 23:00:00"))
-    rs = deb_info.get_deb_version_from_date()
-    print(rs)
+    pass
+    # import yq.auto_fallback.lib.sshClient as sshClient
+    # pc_info = sshClient.sshClient("192.168.114.55","swqa","gfx123456").info
+    # deb_info = deb_info("develop", "20240711", "20240712",pc_info)
+    # # print(deb_info.get_git_commit_info("gr-umd", "develop", "2024-06-24 12:00:00", "2024-06-25 23:00:00"))
+    # rs = deb_info.get_deb_version_from_date()
+    # print(rs)

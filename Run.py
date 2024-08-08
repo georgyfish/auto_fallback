@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-from lib import common
+from lib import fallback_driver
 
 if __name__ == "__main__":    
-    common.run()
+    fallback_driver.Fallback().find_regression()
