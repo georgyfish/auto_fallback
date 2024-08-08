@@ -340,25 +340,26 @@ def run():
     # print(umd_search_list,kmd_search_list)
 
     # print(deb_info_obj.get_deb_version_from_date() )
-    # if component and commit_list:
-    #     commit_list = deb_info_obj.get_commits_from_commit(component,commit_list)
-    #     rs = middle_search(component,commit_list,sshClient_obj,branch)
-    #     if not rs:
-    #         log.logger.error(f"{component} {commit_list}无法确定问题引入范围.")
-    # else:
-    #     # 获取deb 列表 
-    #     driver_list,pc_list = deb_info_obj.get_deb_version_from_date() 
-    #     log.logger.info(f"{driver_list=}")
-    #     log.logger.info(f"{pc_list}")
-    #     deb_rs_list = middle_search('deb',driver_list,sshClient_obj,branch,pc_list)
-    #     log.logger.info(f"deb回退结果为：\"{deb_rs_list[-1]}\"引入")
-    #     umd_rs_list, kmd_rs_list = deb_info_obj.get_UMD_KMD_commit_from_deb(deb_rs_list)
-    #     log.logger.info(f"{umd_rs_list=}\n{kmd_rs_list=}")
-    #     umd_result = middle_search('umd',umd_rs_list,sshClient_obj,branch)
-    #     if not umd_result: 
-    #         kmd_result = middle_search('kmd',kmd_rs_list,sshClient_obj,branch)
-    #     else:
-    #         log.logger.info(f"umd 回退结果为：commitID \"{kmd_result[-1]}\"引入")
+    if component and commit_list:
+        commit_list = deb_info_obj.get_commits_from_commit(component,commit_list)
+        rs = middle_search(component,commit_list,sshClient_obj,branch)
+        if not rs:
+            log.logger.error(f"{component} {commit_list}无法确定问题引入范围.")
+    else:
+        # 获取deb 列表 
+        driver_list,pc_list = deb_info_obj.get_deb_version_from_date() 
+        log.logger.info(f"{driver_list=}")
+        log.logger.info(f"{pc_list}")
+        deb_rs_list = middle_search('deb',driver_list,sshClient_obj,branch,pc_list)
+        log.logger.info(f"deb回退结果为：\"{deb_rs_list[-1]}\"引入")
+        umd_rs_list, kmd_rs_list = deb_info_obj.get_UMD_KMD_commit_from_deb(deb_rs_list)
+        log.logger.info(f"{umd_rs_list=}\n{kmd_rs_list=}")
+        umd_result = middle_search('umd',umd_rs_list,sshClient_obj,branch)
+        if not umd_result: 
+            kmd_result = middle_search('kmd',kmd_rs_list,sshClient_obj,branch)
+            log.logger.info(f"umd 回退结果为：commitID \"{kmd_result[-1]}\"引入")
+        else:
+            log.logger.info(f"umd 回退结果为：commitID \"{umd_result[-1]}\"引入")
 
 
 if __name__ == "__main__":
