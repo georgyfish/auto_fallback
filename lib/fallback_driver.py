@@ -6,7 +6,7 @@ from tabulate import tabulate
 basedir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(basedir)
 from lib.get_driver_info import deb_info
-from lib.logManager import logManager,KeyInfo_Logging
+from lib.logManager import logManager
 from lib import sshClient
 from config import Config
 
