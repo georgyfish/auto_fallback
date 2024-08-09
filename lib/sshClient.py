@@ -13,7 +13,7 @@ class sshClient():
     def __init__(self, hostname, username, password, port=22):
         self.client = paramiko.SSHClient()
         # self.client = None
-        self.log = logManager('ssh')
+        self.log = logManager(hostname,'ssh')
         self.host = hostname       #连接的目标主机
         self.port = port      #指定端口
         self.user = username      #验证的用户名
@@ -110,6 +110,20 @@ class sshClient():
         if result['arch'] == 'aarch64':
             result['arch'] = 'arm64'
         return result
+    
+    def wget_url(self,url,destination_folder,file_name=None):
+        if not file_name :
+            file_name = url.split('/')[-1]
+        destination = f"{destination_folder}/{file_name}"
+        self.execute(f"[ ! -d {destination_folder} ] && mkdir -p {destination_folder}")
+        rs = self.execute(f"wget --no-check-certificate  {url} -O {destination} && echo 'True' ||echo 'False'")[0]
+        if rs == 'False' :
+            self.log.logger.error(f"Download {url} failed !!!")
+            # log.logger.error(f"package {file_name} 下载失败！！！")
+            return False
+        else:
+            self.log.logger.info(f"Download {url} success !!!")
+            return True    
 
 if __name__ == '__main__':
     Pc = sshClient("192.168.114.55","swqa","gfx123456")

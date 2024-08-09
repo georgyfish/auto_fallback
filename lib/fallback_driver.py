@@ -6,7 +6,7 @@ from tabulate import tabulate
 basedir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(basedir)
 from lib.get_driver_info import deb_info
-from lib.logManager import logManager
+from lib.logManager import logManager,KeyInfo_Logging
 from lib import sshClient
 from config import Config
 
@@ -15,8 +15,9 @@ class Fallback:
         self.VALID_OS_TYPE = {"Kylin", "Ubuntu", "UOS"}
         self.timeout = timeout
         self.config = Config()
-        ip = Fallback.get_ip_suffix(self.config.Test_Host_IP)
-        self.log = logManager(ip,'Fallback')
+        # ip = Fallback.get_ip_suffix(self.config.ip)
+        self.log = logManager(self.config.ip,'Fallback')
+        # self.keylog = KeyInfo_Logging(self.config.ip,'Fallback')
         # self.Test_Host_IP,self.Host_name,self.passwd,self.branch,self.begin_date,self.end_date,self.component,self.commit_list = (
         #     self.config.Test_Host_IP,
         #     self.config.Host_name,
@@ -27,13 +28,9 @@ class Fallback:
         #     self.config.component,
         #     self.config.commit_list
         #     )
-        self.sshclient = sshClient.sshClient(self.config.Test_Host_IP,self.config.Host_name,self.config.passwd)
+        self.sshclient = sshClient.sshClient(self.config.ip,self.config.Host_name,self.config.passwd)
 
-    @staticmethod
-    def get_ip_suffix(ip_address):
-        parts = ip_address.split('.')
-        return '.'.join(parts[-2:])
-
+    
 
     @staticmethod
     def testcase():
@@ -41,8 +38,8 @@ class Fallback:
         return rs
 
     def install_driver(self,repo,driver,pc=None):
-        branch = self.config.branch
-        sshclient = self.sshclient
+        # branch = self.config.branch
+        # sshclient = self.sshclient
         # driver_instller = Driver_Installer(sshclient,branch)
         # rs = driver_instller.install(repo,driver,pc)
         if repo == 'deb':
@@ -114,15 +111,17 @@ class Fallback:
         # sshClient_obj = self.sshclient
         pc_info = self.sshclient.info
 
-        deb_info_obj = deb_info(branch,begin_date, end_date,pc_info)
+        deb_info_obj = deb_info(branch,begin_date, end_date,pc_info,self.log)
 
         if commit_list:
             commit_list = deb_info_obj.get_commits_from_commit(component,commit_list)
             rs = self.middle_search(component,commit_list)
             if rs:
                 self.log.logger.info(f"{component} 回退结果为：\"{rs[-1]}\"引入")
+                # self.keylog.keyinfo_logger.info(f"{component} 回退结果为：\"{rs[-1]}\"引入")
         else:
             # 获取deb 列表 
+            # self.keylog.keyinfo_logger.info("=="*30+"Step 1 - 获取deb列表"+"=="*30)
             driver_list,pc_list = deb_info_obj.get_deb_version_from_date() 
             rs = self.middle_search(component,driver_list,pc_list)
             if rs:
@@ -154,8 +153,8 @@ class Fallback:
             UMD_commit_URL = f"http://oss.mthreads.com/release-ci/gr-umd/{branch}/{commit}_{arch}-mtgpu_linux-xorg-release-hw-{glvnd}.tar.gz"
         else:
             UMD_commit_URL = f"http://oss.mthreads.com/release-ci/gr-umd/{branch}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.tar.gz"
-        
-        rs = self.wget_url(UMD_commit_URL,fallback_folder,f"{commit}_UMD.tar.gz")
+
+        Pc.wget_url(UMD_commit_URL,fallback_folder,f"{commit}_UMD.tar.gz")
         Pc.execute(f"cd {fallback_folder} && mkdir -p {fallback_folder}/{commit}_UMD && tar -xvf  {commit}_UMD.tar.gz -C {fallback_folder}/{commit}_UMD")
         
         # 安装
@@ -194,11 +193,11 @@ class Fallback:
         fallback_folder = f"/home/{exec_user}/Fallback/KMD_Fallback"    
         if (kernel_version == '5.4.0-42-generic' and  arch == 'x86_64') or (kernel_version == '5.4.18-73-generic' and  arch == 'arm64'):
             KMD_commit_URL = f"http://oss.mthreads.com/sw-build/gr-kmd/{branch}/{commit}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.tar.gz"
-            self.wget_url(KMD_commit_URL,fallback_folder,f"{commit}_KMD.tar.gz")
+            Pc.wget_url(KMD_commit_URL,fallback_folder,f"{commit}_KMD.tar.gz")
         else:
             KMD_commit_URL = f"http://oss.mthreads.com/sw-build/gr-kmd/{branch}/{commit}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.deb"
             Pc.execute(f"rm -rf {fallback_folder}/{commit}_KMD*")
-            self.wget_url(KMD_commit_URL,fallback_folder,f"{commit}_KMD.deb")
+            Pc.wget_url(KMD_commit_URL,fallback_folder,f"{commit}_KMD.deb")
         # 安装dkms mtgpu.deb需要卸载musa ddk
         Pc.execute(f"sudo systemctl stop {dm_type}")
         time.sleep(10)
@@ -263,7 +262,7 @@ class Fallback:
         print(f"{driver_name=}")
         driver_url = f"https://oss.mthreads.com/product-release/{branch}/{work_date}/{driver_name}"
         fallback_folder = f"/home/{exec_user}/Fallback/DEB_Fallback"
-        self.wget_url(driver_url,fallback_folder)
+        Pc.wget_url(driver_url,fallback_folder)
         rs = Pc.execute(f"sudo dpkg -P musa && sudo DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true apt install {fallback_folder}/{driver_name} -y --allow-downgrades && \
                 echo 'apt install pass' || echo 'apt install fail'")
         # check  install command run status;  
@@ -333,22 +332,6 @@ class Fallback:
         if  deb_version:
             self.log.logger.info(f"{deb_version=}")
         return deb_version
-    
-    def wget_url(self,url,destination_folder,file_name=None):
-        client = self.sshclient
-        if not file_name :
-            file_name = url.split('/')[-1]
-        destination = f"{destination_folder}/{file_name}"
-        client.execute(f"[ ! -d {destination_folder} ] && mkdir -p {destination_folder}")
-        rs = client.execute(f"wget --no-check-certificate  {url} -O {destination} && echo 'True' ||echo 'False'")[0]
-        if rs == 'False' :
-            self.log.logger.error(f"Download {url} failed !!!")
-            # log.logger.error(f"package {file_name} 下载失败！！！")
-            return False
-        else:
-            self.log.logger.info(f"Download {url} success !!!")
-            return True      
-
 
 if __name__ == "__main__":
 

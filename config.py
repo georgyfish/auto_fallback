@@ -12,7 +12,7 @@ class Config:
         self.component = self._config_data.get('component','deb')
         self.commit_list = self._config_data.get('commit_list',None)
         self.branch = self._config_data.get('branch','develop')
-        self.Test_Host_IP,self.Host_name,self.passwd,self.branch = (
+        self.ip,self.Host_name,self.passwd,self.branch = (
             self._config_data['Test_Host_IP'],
             self._config_data['Host_name'],
             self._config_data['passwd'],
@@ -32,13 +32,18 @@ class Config:
     
     def _parse_args(self):
         parser = argparse.ArgumentParser()
+        parser.add_argument('--ip', type=str, help='The IP address of the test execution environment.')
         parser.add_argument('-b','--branch',type=str, help="branch support develop ...")
         parser.add_argument('-c','--component',type=str, choices = ['umd','kmd'], help="The component in ['umd','kmd']")
         parser.add_argument('-i','--commit_list',nargs=2, type=Config.validate_commit, help="需输入两笔commit:'commit_pass' 'commit_fail'")
         parser.add_argument('--begin_date', type=str, help='The begin date in YYYYMMDD format')
         parser.add_argument('--end_date', type=str, help='The ending date in YYYYMMDD format')
+        
+        # parser.add_argument('--user', type=str, default='swqa', help='The Username of the test execution environment.')
+        # parser.add_argument('--passwd', type=str, default='gfx123456', help='The Username of the test execution environment.')
         args = parser.parse_args()
-
+        if  args.ip :
+            self.ip = args.ip
         if args.begin_date:
             # 如果命令行参数中提供了 begin_date，则更新 begin_date 属性
             self.begin_date = args.begin_date
