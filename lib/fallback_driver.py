@@ -15,19 +15,8 @@ class Fallback:
         self.VALID_OS_TYPE = {"Kylin", "Ubuntu", "UOS"}
         self.timeout = timeout
         self.config = Config()
-        # ip = Fallback.get_ip_suffix(self.config.ip)
         self.log = logManager(self.config.ip,'Fallback')
-        # self.keylog = KeyInfo_Logging(self.config.ip,'Fallback')
-        # self.Test_Host_IP,self.Host_name,self.passwd,self.branch,self.begin_date,self.end_date,self.component,self.commit_list = (
-        #     self.config.Test_Host_IP,
-        #     self.config.Host_name,
-        #     self.config.passwd,
-        #     self.config.branch,
-        #     self.config.begin_date,
-        #     self.config.end_date,
-        #     self.config.component,
-        #     self.config.commit_list
-        #     )
+
         self.sshclient = sshClient.sshClient(self.config.ip,self.config.Host_name,self.config.passwd)
 
     
@@ -38,10 +27,6 @@ class Fallback:
         return rs
 
     def install_driver(self,repo,driver,pc=None):
-        # branch = self.config.branch
-        # sshclient = self.sshclient
-        # driver_instller = Driver_Installer(sshclient,branch)
-        # rs = driver_instller.install(repo,driver,pc)
         if repo == 'deb':
             rs = self.install_deb(driver,pc)
         elif repo == 'umd':
@@ -58,7 +43,7 @@ class Fallback:
         # 后续写入文本
         headers = ["Version/Commit", "result"]
         table = tabulate(data, headers=headers, tablefmt="grid")
-        print(table)
+        # print(table)
         return table
 
     def middle_search(self,repo,search_list,pc_list=None):
@@ -78,25 +63,26 @@ class Fallback:
         else:
             data[left][-1] = self.install_driver(repo,search_list[left])
             data[right][-1] = self.install_driver(repo,search_list[right])
-        Fallback.print_table(data)
+        self.log.logger.info(f"回退进度：\n{Fallback.print_table(data)}")
         if data[left][-1] == data[right][-1]:
-            self.log.logger.info(f"{search_list}区间内第一个元素和最后一个的结果相同，请确认区间范围")
+            self.log.logger.info(f"{search_list}区间内第一个元素和最后一个的结果相同，请确认回退区间范围")
             return None               
         while left <= right -2 :
             middle = (left + right )//2 
             count += 1 
             # 查找进度打印
-            print(f"继续安装{search_list[middle]}")
+
             if repo == 'deb' and pc_list:
                 data[middle][-1] = self.install_driver(repo,search_list[middle],pc_list[middle])
             else:
                 data[middle][-1] = self.install_driver(repo,search_list[middle])
-            Fallback.print_table(data)
+            # Fallback.print_table(data)
+            self.log.logger.info(f"回退进度：\n{Fallback.print_table(data)}")
             if data[middle][-1] != None and data[middle][-1] == data[left][-1]:
                 left = middle 
             elif data[middle][-1] != None and data[middle][-1] == data[right][-1]:
                 right = middle 
-        self.log.logger.info(f"总共{count}次查找\n\n定位到问题引入范围是：\"{search_list[left]}\"(不发生)-\"{search_list[right]}\"(发生)之间引入") 
+        self.log.logger.info(f"总共{count}次回退查找\n\n定位到问题引入范围是：\"{search_list[left]}\"(不发生)-\"{search_list[right]}\"(发生)之间引入") 
         return search_list[left:right+1]
 
     def find_regression(self):
@@ -115,6 +101,7 @@ class Fallback:
 
         if commit_list:
             commit_list = deb_info_obj.get_commits_from_commit(component,commit_list)
+            self.log.logger.info(f"{component} 回退列表为：{commit_list}")
             rs = self.middle_search(component,commit_list)
             if rs:
                 self.log.logger.info(f"{component} 回退结果为：\"{rs[-1]}\"引入")
@@ -123,17 +110,18 @@ class Fallback:
             # 获取deb 列表 
             # self.keylog.keyinfo_logger.info("=="*30+"Step 1 - 获取deb列表"+"=="*30)
             driver_list,pc_list = deb_info_obj.get_deb_version_from_date() 
+            self.log.logger.info(f"'deb' 回退列表为：{commit_list}")
             rs = self.middle_search(component,driver_list,pc_list)
             if rs:
                 self.log.logger.info(f"deb回退结果为：\"{rs[-1]}\"引入")
                 # 获取umd、kmd info，后续可添加video、gmi
                 umd_list, kmd_list = deb_info_obj.get_UMD_KMD_commit_from_deb(rs)
-                self.log.logger.info(f"{umd_list=}")
-                self.log.logger.info(f"{kmd_list=}")
                 component = 'umd'
+                self.log.logger.info(f"{component} 回退列表为：{umd_list}")
                 rs = self.middle_search(component,umd_list)
                 if not rs: 
                     component = 'kmd'
+                    self.log.logger.info(f"{component} 回退列表为：{kmd_list}")
                     rs = self.middle_search(component,kmd_list)
                 self.log.logger.info(f"{component} 回退结果为：\"{rs[-1]}\"引入")
 

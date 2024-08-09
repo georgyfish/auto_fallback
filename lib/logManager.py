@@ -24,6 +24,11 @@ class CustomFormatter(logging.Formatter):
             return f"{Colors.RED}{log_message}{Colors.RESET}"
         return log_message
 
+class FallbackLogFilter(logging.Filter):
+    def filter(self, record):
+        # 只允许包含 "回退" 关键字的日志记录进入 log_important.txt
+        return "回退" in record.getMessage()
+
 class logManager():
     # log_level没法直接用字符串，通过eval执行后，就变成logging定义的对象了
     log_level = eval("logging.DEBUG")
@@ -42,9 +47,8 @@ class logManager():
         now = now.strftime("%Y%m%d_%H%M%S")
         IP = logManager.get_ip_suffix(IP)
         _log_file = os.path.join(_baseHome, self.log_path, f"log_{IP}_{now}.txt")
-        # _keyinfo_file = os.path.join(_baseHome,self.log_path,f"keyinfo_{IP}.txt")
+        _keyinfo_file = os.path.join(_baseHome,self.log_path,f"fallback_info_{IP}_{now}.txt")
         if not os.path.exists(_log_file):
-            # os.makedirs(self.log_path)
             os.makedirs(os.path.join(_baseHome,self.log_path), exist_ok=True)
             # with open(_log_file,'w') as f:
             #     f.write('')
@@ -59,6 +63,12 @@ class logManager():
         console.setLevel(self.console_level)
         console.setFormatter(console_formatter)
         self.logger.addHandler(console)
+
+        fallback_handler = RotatingFileHandler(filename=_keyinfo_file, maxBytes=10*1024*1024, backupCount=0)
+        fallback_handler.setLevel(self.log_level)
+        fallback_handler.setFormatter(formatter)
+        fallback_handler.addFilter(FallbackLogFilter())
+        self.logger.addHandler(fallback_handler)
     
     @staticmethod
     def get_ip_suffix(ip_address):
@@ -66,48 +76,48 @@ class logManager():
         return '.'.join(parts[-2:])
 
     @staticmethod
-    def creat_handler(file,log_level,Keyinfo_formatter):
-        keyinfo_handler = RotatingFileHandler(filename=file, maxBytes=10*1024*1024, backupCount=0)
-        keyinfo_handler.setLevel(log_level)
-        keyinfo_handler.setFormatter(Keyinfo_formatter)
-        return keyinfo_handler
+    def creat_handler(file,log_level,formatter):
+        handler = RotatingFileHandler(filename=file, maxBytes=10*1024*1024, backupCount=0)
+        handler.setLevel(log_level)
+        handler.setFormatter(formatter)
+        return handler
 
-class KeyInfo_Logging:
+# class KeyInfo_Logging:
 
-    # log_level没法直接用字符串，通过eval执行后，就变成logging定义的对象了
-    log_level = eval("logging.INFO")
+#     # log_level没法直接用字符串，通过eval执行后，就变成logging定义的对象了
+#     log_level = eval("logging.INFO")
 
-    log_format = "%(asctime)s - %(name)s - %(filename)s[line:%(lineno)d] - %(levelname)s - %(message)s"
-    log_path = "log"
-    def __init__(self, IP, name="main"):
-        self.keyinfo_logger = logging.getLogger(name)
-        self.keyinfo_logger.setLevel(level=self.log_level)
-        Keyinfo_formatter = logging.Formatter(self.log_format)
-        # console_formatter = CustomFormatter(self.console_format)
-        # logging的TimedRotatingFileHandler方法提供滚动输出日志的功能
-        now = datetime.datetime.now()
-        now = now.strftime("%Y%m%d_%H%M%S")
-        IP = logManager.get_ip_suffix(IP)
-        # _log_file = os.path.join(_baseHome, self.log_path, f"log_{IP}_{now}.txt")
-        _keyinfo_file = os.path.join(_baseHome,self.log_path,f"keyinfo_{IP}.txt")
-        if not  not os.path.exists(_keyinfo_file):
-            os.makedirs(os.path.join(_baseHome,self.log_path), exist_ok=True)
-            # with open(_keyinfo_file,'a') as file:
-            #     file.write('')
-        # keyinfo_handler = RotatingFileHandler(filename=_keyinfo_file, maxBytes=10*1024*1024, backupCount=0)
-        # keyinfo_handler.setLevel(self.log_level)
-        # keyinfo_handler.setFormatter(Keyinfo_formatter)
-        keyinfo_handler = logManager.creat_handler(_keyinfo_file,self.log_level,Keyinfo_formatter)
-        self.keyinfo_logger.addHandler(keyinfo_handler)
+#     log_format = "%(asctime)s - %(name)s - %(filename)s[line:%(lineno)d] - %(levelname)s - %(message)s"
+#     log_path = "log"
+#     def __init__(self, IP, name="main"):
+#         self.keyinfo_logger = logging.getLogger(name)
+#         self.keyinfo_logger.setLevel(level=self.log_level)
+#         Keyinfo_formatter = logging.Formatter(self.log_format)
+#         # console_formatter = CustomFormatter(self.console_format)
+#         # logging的TimedRotatingFileHandler方法提供滚动输出日志的功能
+#         now = datetime.datetime.now()
+#         now = now.strftime("%Y%m%d_%H%M%S")
+#         IP = logManager.get_ip_suffix(IP)
+#         # _log_file = os.path.join(_baseHome, self.log_path, f"log_{IP}_{now}.txt")
+#         _keyinfo_file = os.path.join(_baseHome,self.log_path,f"fallback_info_{IP}_.txt")
+#         if not  not os.path.exists(_keyinfo_file):
+#             os.makedirs(os.path.join(_baseHome,self.log_path), exist_ok=True)
+#             # with open(_keyinfo_file,'a') as file:
+#             #     file.write('')
+#         # keyinfo_handler = RotatingFileHandler(filename=_keyinfo_file, maxBytes=10*1024*1024, backupCount=0)
+#         # keyinfo_handler.setLevel(self.log_level)
+#         # keyinfo_handler.setFormatter(Keyinfo_formatter)
+#         keyinfo_handler = logManager.creat_handler(_keyinfo_file,self.log_level,Keyinfo_formatter)
+#         self.keyinfo_logger.addHandler(keyinfo_handler)
 
     
 
 if __name__ == "__main__":
     log = logManager('192.168.1.2')
-    keylog = KeyInfo_Logging('192.168.1.2')
+    # keylog = KeyInfo_Logging('192.168.1.2')
     logger = logging.getLogger('main')
     log.logger.warning('log test----------')
-    log.logger.info("This is an info message")
+    log.logger.info("This is an 回退info message")
     log.logger.error("This is an error message")
     # keylog.keyinfo_logger.warning("This is an keyinfo_logger warning message")
     # keylog.keyinfo_logger.info("This is an keyinfo_logger info message")
