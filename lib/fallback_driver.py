@@ -40,7 +40,7 @@ class Fallback:
 
     @staticmethod
     def print_table(data):
-        # 后续写入文本
+        # 后续写入csv?
         headers = ["Version/Commit", "result"]
         table = tabulate(data, headers=headers, tablefmt="grid")
         # print(table)
@@ -110,7 +110,7 @@ class Fallback:
             # 获取deb 列表 
             # self.keylog.keyinfo_logger.info("=="*30+"Step 1 - 获取deb列表"+"=="*30)
             driver_list,pc_list = deb_info_obj.get_deb_version_from_date() 
-            self.log.logger.info(f"'deb' 回退列表为：{commit_list}")
+            self.log.logger.info(f"'deb' 回退列表为：{driver_list}")
             rs = self.middle_search(component,driver_list,pc_list)
             if rs:
                 self.log.logger.info(f"deb回退结果为：\"{rs[-1]}\"引入")
@@ -159,7 +159,8 @@ class Fallback:
         Pc.execute(f"sudo ldconfig && sudo systemctl restart {dm_type}")
         # check umd version
         time.sleep(10)
-        Umd_Version = Pc.execute("export DISPLAY=:0.0 && glxinfo -B |grep -i 'OpenGL version string'|grep -oP '\\b[0-9a-f]{9}\\b(?=@)'")[0]
+        # Umd_Version = Pc.execute("export DISPLAY=:0.0 && glxinfo -B |grep -i 'OpenGL version string'|grep -oP '\\b[0-9a-f]{9}\\b(?=@)'")[0]
+        Umd_Version = self.show_umd()
         if Umd_Version == commit:
             self.log.logger.info(f"安装UMD 成功，版本号为 {Umd_Version}")
             self.log.logger.info('=='*10 + f"Install UMD commit {commit} Complete" + '=='*10)
@@ -205,25 +206,21 @@ class Fallback:
             Pc.execute('sudo rm -rf /usr/src/mtgpu-1.0.0')
             Pc.execute(f'sudo dpkg -X {fallback_folder}/{commit}_KMD.deb /')
             Pc.execute('sudo dkms add mtgpu -v 1.0.0')
+            # dkms build, 安装失败大概率会在这里出错
             Pc.execute('sudo dkms install mtgpu -v 1.0.0')
         rs = Pc.execute("[ ! -e /etc/modprobe.d/mtgpu.conf ] && echo yes || echo no")
         if rs[0] == 'yes':
             Pc.execute("echo -e 'options mtgpu display=mt EnableFWContextSwitch=27'  |sudo tee /etc/modprobe.d/mtgpu.conf")
         Pc.execute("sudo depmod -a && sudo update-initramfs -u")
         # reboot && check kmd version 
-        if Pc.reboot_and_reconnect(wait_time=30, retries=20):
-            rs = Pc.execute("lsmod |grep mtgpu")[0]
-            if rs:
-                Kmd_Version = Pc.execute("modinfo mtgpu |grep build_version |awk '{print $NF}'")[0]
-                if Kmd_Version in  commit:
-                    self.log.logger.info(f"安装KMD成功，版本号为 {Kmd_Version}")
-                    self.log.logger.info('=='*10 + f"Install KMD commit {commit} Complete" + '=='*10)
-                    return True
-                else:
-                    self.log.logger.error(f"安装KMD {commit}失败, {Kmd_Version=}")
-                    return False
+        if Pc.reboot_and_reconnect(wait_time=30, retries=10):
+            Kmd_Version = self.show_kmd()
+            if Kmd_Version in  commit:
+                self.log.logger.info(f"安装KMD成功，版本号为 {Kmd_Version}")
+                self.log.logger.info('=='*10 + f"Install KMD commit {commit} Complete" + '=='*10)
+                return True
             else:
-                self.log.logger.error(f"kmd no load present !!!")
+                self.log.logger.error(f"安装KMD {commit}失败, {Kmd_Version=}")
                 return False
     
     def install_deb(self,driver,pc=None):
@@ -258,21 +255,14 @@ class Fallback:
             self.log.logger.error(f'"apt install {fallback_folder}/{driver_name} -y"执行报错！')
             return False
         self.log.logger.info(f'"apt install {fallback_folder}/{driver_name} -y"执行未报错')
-        # 重启
+        # 重启,check install version
         if Pc.reboot_and_reconnect(wait_time=30, retries=10):
-            deb_version = '0'
-            result = Pc.execute(f"dpkg -s musa")
-            for line in result[0].splitlines():
-                if "Version: " in line:
-                    deb_version = line.split("Version: ")[-1]
+            deb_version = self.show_deb()
             driver_version = driver.split("musa_")[-1]
             if driver_version in deb_version:
                 self.log.logger.info(f"driver安装成功，版本号为 {deb_version}")
                 self.log.logger.info('=='*10 + f"Install  driver {driver} Complete" + '=='*10)
                 return True
-            elif deb_version != '0' and driver not in deb_version:
-                self.log.logger.error(f"安装{driver}失败，版本号为 {deb_version}")
-                return False
             else:
                 self.log.logger.error(f"包 {driver_name} 未安装成功。")
                 return False
@@ -284,12 +274,14 @@ class Fallback:
             Kmd_Version = Pc.execute("modinfo mtgpu |grep build_version |awk '{print $NF}'")[0]
             if Kmd_Version:
                 self.log.logger.info(f"{Kmd_Version=}")
+        return Kmd_Version
 
     def show_umd(self):
         Pc = self.sshclient
         Umd_Version = None
         display_var = self.get_display_var()
         if display_var:
+            # 通过'OGL version'获取
             Umd_Version = Pc.execute(f"export DISPLAY={display_var} && glxinfo -B |grep -i 'OpenGL version string'|grep -oP '\\b[0-9a-f]{{9}}\\b(?=@)'")[0]
         if  Umd_Version :
             self.log.logger.info(f"{Umd_Version=}")
@@ -314,6 +306,7 @@ class Fallback:
     def show_deb(self):
         Pc = self.sshclient
         result = Pc.execute(f"dpkg -s musa")
+        deb_version = ''
         for line in result[0].splitlines():
             if "Version: " in line:
                 deb_version = line.split("Version: ")[-1]
