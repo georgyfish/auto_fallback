@@ -7,6 +7,8 @@ import urllib.parse
 basedir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(basedir)
 # from lib.logManager import logManager
+from lib.oss_tool import OSSTool
+
 class deb_info:
     def __init__(self,branch,begin_date,end_date,pc_info,Log):
         # self.log = logManager('get_deb_info')
@@ -79,6 +81,14 @@ class deb_info:
         result = self.Check_Driver_URL('deb',result,pc_list)
         return result,pc_list
 
+    def get_deb_from_oss(self):
+        result = []
+        remove_result = [] 
+        pc_list = []
+        daily_build_txts = ['daily_build_pc.txt', 'daily_build.txt']
+        o = OSSTool('mtoss', 'mtoss123')
+        # o.ls('product',f'/{self.branch}/{date}')
+
     # 检查url 响应状态码是否是200
     def check_url(self,url):
         try:
@@ -90,6 +100,7 @@ class deb_info:
         except Exception as e:
             print(f"An error occurred: {e}")
             return False
+
 
     def slice_full_list(self,start_end_list, full_list):
         try:
@@ -243,7 +254,7 @@ class deb_info:
             self.log.logger.info(f"{kmd_search_list=}\n")
             return kmd_search_list
     
-    def Check_Driver_URL(self,repo,check_list,pc_list=None):
+    def Check_Driver_URL1(self,repo,check_list,pc_list=None):
         branch,arch,glvnd,os_type,architecture = (
             self.branch,
             self.arch,
@@ -275,10 +286,56 @@ class deb_info:
                 work_date = datetime.datetime.strptime(work_date, "%Y.%m.%d").strftime("%Y%m%d")
                 url = f"https://oss.mthreads.com/product-release/{branch}/{work_date}/{driver_name}"
             if self.check_url(url):
+                # OSSTool('mtoss', 'mtoss123').ls()
                 result.append(commit)
                 file_found = True
             else:
                 self.log.logger.error(f"URL {url} is not accessible.")
+            if not file_found:
+                remove_result.append(commit)
+        if remove_result:
+            self.log.logger.info(f"因oss地址不存在移除{repo}列表{remove_result}")
+        print(result)
+        return result
+    
+    def Check_Driver_URL(self,repo,check_list,pc_list=None):
+        branch,arch,glvnd,os_type,architecture = (
+            self.branch,
+            self.arch,
+            self.glvnd,
+            self.os_type,
+            self.architecture
+        )
+        o = OSSTool('mtoss', 'mtoss123')
+        result = []
+        remove_result = [] 
+        for commit in check_list:
+            file_found = False
+            if repo == 'umd':
+                bucket = 'release-ci'
+                path = f'/gr-umd/{branch}/{commit}_{arch}-mtgpu_linux-xorg-release-hw-{glvnd}.tar.gz'
+                if glvnd:
+                    path = f'/gr-umd/{branch}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.tar.gz'
+            elif repo == 'kmd':
+                bucket = 'sw-build'
+                path = f'/gr-kmd/{branch}/{commit}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.deb'
+            else:
+                # pc包和非pc包
+                bucket = 'product-release'
+                driver_name = f"{commit}+dkms+{glvnd}-{os_type}_{architecture}.deb"
+                if pc_list:
+                    pc = pc_list[check_list.index(commit)]
+                    if pc == 'pc':
+                        driver_name = f"{commit}+dkms+{glvnd}-{pc}_{architecture}.deb"
+                work_date = re.search(r"\d{4}.\d{2}.\d{2}",commit)
+                work_date = work_date.group()
+                work_date = datetime.datetime.strptime(work_date, "%Y.%m.%d").strftime("%Y%m%d")
+                path = f'/{branch}/{work_date}/{driver_name}'
+            if o.ls(bucket, path):
+                result.append(commit)
+                file_found = True
+            else:
+                self.log.logger.error(f"URL {bucket}{path} is not accessible.")
             if not file_found:
                 remove_result.append(commit)
         if remove_result:
