@@ -21,6 +21,7 @@ class deb_info:
         self.os_type = pc_info['os_type']
         self.architecture = pc_info['architecture']
         self.work_date_list = self.deal(begin_date,end_date)
+        self.oss = OSSTool('mtoss', 'mtoss123')
     
     def deal(self,begin_date,end_date):
         date_list = []
@@ -76,18 +77,78 @@ class deb_info:
                 remove_result.append(work_date)
         if remove_result:
             self.log.logger.info(f"因oss daily_build地址不存在移除 {remove_result}")
-        # print(f"{result=}")
-        # print(f"{pc_list=}")
         result = self.Check_Driver_URL('deb',result,pc_list)
         return result,pc_list
+
+    def daily_build(self,work_date):
+        if self.oss.ls('product-release',f'/{self.branch}/{work_date}/daily_build_pc.txt'):
+            driver = self.oss.show_text(f'product-release/{self.branch}/{work_date}/daily_build_pc.txt').splitlines()[0]
+            driver_name = f"{driver}+dkms+{self.glvnd}-pc_{self.architecture}.deb"
+            if self.oss.ls('product-release',f'/{self.branch}/{work_date}/{driver_name}'):
+                pc = 'pc'
+                return driver,pc
+            else:
+                return self.no_daily_build(work_date)
+        elif self.oss.ls('product-release',f'/{self.branch}/{work_date}/daily_build.txt'):
+            driver = self.oss.show_text(f'product-release/{self.branch}/{work_date}/daily_build.txt').splitlines()[0]
+            driver_name = f"{driver}+dkms+{self.glvnd}-{self.os_type}_{self.architecture}.deb"
+            if self.os_type == 'Kylin':
+                driver_name = f"{driver}+dkms-{self.os_type}_{self.architecture}.deb"
+            if self.os_type == 'Ubuntu':
+                if self.architecture != 'amd64':
+                    self.log.logger.error("不支持的架构")
+                    return None
+            if self.oss.ls('product-release',f'/{self.branch}/{work_date}/{driver_name}'):
+                pc = 'os_type'
+                return driver,pc
+            else:
+                return self.no_daily_build(work_date)
+        else:
+            return self.no_daily_build(work_date)
+        
+    def no_daily_build(self,work_date):
+        build_ids = []
+        files = []
+        file_list = self.oss.ls('product-release',f'/{self.branch}/{work_date}/')
+        if file_list:
+            for file in file_list:
+                files.append(file['name'].split('/')[-1])
+            for file in files:
+                if file.endswith(f'{self.os_type}_{self.architecture}.deb') and 'server' not in file:
+                    build_id = file.split('+')[1]
+                    build_ids.append(build_id)
+            if  build_ids:
+                for file in files:
+                    if file.endswith(f'{self.os_type}_{self.architecture}.deb') and 'server' not in file and max(build_ids,key=int) in file:
+                        drivername = file.split('/')[-1]
+                        driver = '+'.join(drivername.split('+')[:2])
+                        pc = 'old_build' 
+                        return driver,pc
+            else:
+                return  None
+        else:
+            return None
 
     def get_deb_from_oss(self):
         result = []
         remove_result = [] 
         pc_list = []
-        daily_build_txts = ['daily_build_pc.txt', 'daily_build.txt']
-        o = OSSTool('mtoss', 'mtoss123')
-        # o.ls('product',f'/{self.branch}/{date}')
+        self.log.logger.info(f"查找日期{self.begin_date}-{self.end_date}：")
+        for work_date in self.work_date_list:
+            rs =  self.daily_build(work_date)
+            if  rs :
+                driver,pc = rs
+                pc_list.append(pc)
+                # self.log.logger.info(f"{driver=}")
+                result.append(driver)
+            else:
+                remove_result.append(work_date)
+        if remove_result:
+            self.log.logger.info(f"因oss地址下不存在文件移除 {remove_result}")          
+        # self.log.logger.info(f"\n{result=}\n{len(result)=}")
+        # self.log.logger.info(f"\n{pc_list=}\n{len(pc_list)=}")
+        if len(result) == len(pc_list):
+            return result,pc_list
 
     # 检查url 响应状态码是否是200
     def check_url(self,url):
@@ -254,50 +315,6 @@ class deb_info:
             self.log.logger.info(f"{kmd_search_list=}\n")
             return kmd_search_list
     
-    def Check_Driver_URL1(self,repo,check_list,pc_list=None):
-        branch,arch,glvnd,os_type,architecture = (
-            self.branch,
-            self.arch,
-            self.glvnd,
-            self.os_type,
-            self.architecture
-        )
-        result = []
-        remove_result = [] 
-        for commit in check_list:
-            file_found = False
-            if repo == 'umd':
-                url = f"http://oss.mthreads.com/release-ci/gr-umd/{branch}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.tar.gz"
-                if glvnd:
-                    url = f"http://oss.mthreads.com/release-ci/gr-umd/{branch}/{commit}_{arch}-mtgpu_linux-xorg-release-hw-{glvnd}.tar.gz"
-                # urls = [url]
-            elif repo == 'kmd':
-                url = f"http://oss.mthreads.com/sw-build/gr-kmd/{branch}/{commit}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.deb"
-                # urls = [url]
-            else:
-                # pc包和非pc包
-                driver_name = f"{commit}+dkms+{glvnd}-{os_type}_{architecture}.deb"
-                if pc_list:
-                    pc = pc_list[check_list.index(commit)]
-                    if pc == 'pc':
-                        driver_name = f"{commit}+dkms+{glvnd}-{pc}_{architecture}.deb"
-                work_date = re.search(r"\d{4}.\d{2}.\d{2}",commit)
-                work_date = work_date.group()
-                work_date = datetime.datetime.strptime(work_date, "%Y.%m.%d").strftime("%Y%m%d")
-                url = f"https://oss.mthreads.com/product-release/{branch}/{work_date}/{driver_name}"
-            if self.check_url(url):
-                # OSSTool('mtoss', 'mtoss123').ls()
-                result.append(commit)
-                file_found = True
-            else:
-                self.log.logger.error(f"URL {url} is not accessible.")
-            if not file_found:
-                remove_result.append(commit)
-        if remove_result:
-            self.log.logger.info(f"因oss地址不存在移除{repo}列表{remove_result}")
-        print(result)
-        return result
-    
     def Check_Driver_URL(self,repo,check_list,pc_list=None):
         branch,arch,glvnd,os_type,architecture = (
             self.branch,
@@ -350,6 +367,11 @@ class deb_info:
 
 if __name__ == '__main__':
     pass
+    # import sshClient,logManager
+    # pc_info = sshClient.sshClient("192.168.114.55","swqa","gfx123456").info
+    # log = logManager('192.168.114.12')
+    # deb_info_obj = deb_info('develop','20240801', '20240808',pc_info,log)
+    # deb_info_obj.get_deb_from_oss()
     # import yq.auto_fallback.lib.sshClient as sshClient
     # pc_info = sshClient.sshClient("192.168.114.55","swqa","gfx123456").info
     # deb_info = deb_info("develop", "20240711", "20240712",pc_info)

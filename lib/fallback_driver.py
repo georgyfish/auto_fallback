@@ -98,41 +98,42 @@ class Fallback:
         pc_info = self.sshclient.info
 
         deb_info_obj = deb_info(branch,begin_date, end_date,pc_info,self.log)
-
-        if commit_list:
-            commit_list = deb_info_obj.get_commits_from_commit(component,commit_list)
-            self.log.logger.info(f"{component} 回退列表为：{commit_list}")
-            rs = self.middle_search(component,commit_list)
-            if rs:
-                self.log.logger.info(f"{component} 回退结果为：\"{rs[-1]}\"引入")
-                # self.keylog.keyinfo_logger.info(f"{component} 回退结果为：\"{rs[-1]}\"引入")
-        else:
-            # 获取deb 列表 
-            # self.keylog.keyinfo_logger.info("=="*30+"Step 1 - 获取deb列表"+"=="*30)
-            driver_list,pc_list = deb_info_obj.get_deb_version_from_date() 
-            self.log.logger.info(f"'deb' 回退列表为：{driver_list}")
-            rs = self.middle_search(component,driver_list,pc_list)
-            if rs:
-                self.log.logger.info(f"deb回退结果为：\"{rs[-1]}\"引入")
-                # 获取umd、kmd info，后续可添加video、gmi
-                umd_list, kmd_list = deb_info_obj.get_UMD_KMD_commit_from_deb(rs)
-                component = 'umd'
-                self.log.logger.info(f"{component} 回退列表为：{umd_list}")
-                rs = self.middle_search(component,umd_list)
-                if not rs: 
-                    component = 'kmd'
-                    self.log.logger.info(f"{component} 回退列表为：{kmd_list}")
-                    rs = self.middle_search(component,kmd_list)
-                self.log.logger.info(f"{component} 回退结果为：\"{rs[-1]}\"引入")
+        deb_info_obj.get_deb_from_oss()
+        # if commit_list:
+        #     commit_list = deb_info_obj.get_commits_from_commit(component,commit_list)
+        #     self.log.logger.info(f"{component} 回退列表为：{commit_list}")
+        #     rs = self.middle_search(component,commit_list)
+        #     if rs:
+        #         self.log.logger.info(f"{component} 回退结果为：\"{rs[-1]}\"引入")
+        #         # self.keylog.keyinfo_logger.info(f"{component} 回退结果为：\"{rs[-1]}\"引入")
+        # else:
+        #     # 获取deb 列表 
+        #     # self.keylog.keyinfo_logger.info("=="*30+"Step 1 - 获取deb列表"+"=="*30)
+        #     driver_list,pc_list = deb_info_obj.get_deb_from_oss()
+        #     self.log.logger.info(f"'deb' 回退列表为：{driver_list}")
+        #     rs = self.middle_search(component,driver_list,pc_list)
+        #     if rs:
+        #         self.log.logger.info(f"deb回退结果为：\"{rs[-1]}\"引入")
+        #         # 获取umd、kmd info，后续可添加video、gmi
+        #         umd_list, kmd_list = deb_info_obj.get_UMD_KMD_commit_from_deb(rs)
+        #         component = 'umd'
+        #         self.log.logger.info(f"{component} 回退列表为：{umd_list}")
+        #         rs = self.middle_search(component,umd_list)
+        #         if not rs: 
+        #             component = 'kmd'
+        #             self.log.logger.info(f"{component} 回退列表为：{kmd_list}")
+        #             rs = self.middle_search(component,kmd_list)
+        #         self.log.logger.info(f"{component} 回退结果为：\"{rs[-1]}\"引入")
 
     def install_umd(self,commit):
         Pc = self.sshclient
-        branch,glvnd,arch,dm_type,exec_user = (
+        branch,glvnd,arch,dm_type,exec_user,os_type= (
             self.config.branch,
             Pc.info['glvnd'],
             Pc.info['arch'],
             Pc.info['dm_type'],
-            Pc.info['exec_user']
+            Pc.info['exec_user'],
+            Pc.info['os_type']
         )
         self.log.logger.info('=='*10 + f"Installing UMD commit {commit}" + '=='*10)
         fallback_folder = f"/home/{exec_user}/Fallback/UMD_Fallback"
@@ -141,7 +142,6 @@ class Fallback:
             UMD_commit_URL = f"http://oss.mthreads.com/release-ci/gr-umd/{branch}/{commit}_{arch}-mtgpu_linux-xorg-release-hw-{glvnd}.tar.gz"
         else:
             UMD_commit_URL = f"http://oss.mthreads.com/release-ci/gr-umd/{branch}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.tar.gz"
-
         Pc.wget_url(UMD_commit_URL,fallback_folder,f"{commit}_UMD.tar.gz")
         Pc.execute(f"cd {fallback_folder} && mkdir -p {fallback_folder}/{commit}_UMD && tar -xvf  {commit}_UMD.tar.gz -C {fallback_folder}/{commit}_UMD")
         
@@ -158,7 +158,7 @@ class Fallback:
                 Pc.execute("echo -e '/usr/lib/arm-linux-gnueabihf/musa' |sudo tee -a /etc/ld.so.conf.d/00-mtgpu.conf")
         Pc.execute(f"sudo ldconfig && sudo systemctl restart {dm_type}")
         # check umd version
-        time.sleep(10)
+        time.sleep(5)
         # Umd_Version = Pc.execute("export DISPLAY=:0.0 && glxinfo -B |grep -i 'OpenGL version string'|grep -oP '\\b[0-9a-f]{9}\\b(?=@)'")[0]
         Umd_Version = self.show_umd()
         if Umd_Version == commit:
@@ -239,22 +239,21 @@ class Fallback:
         driver_name = f"{driver}+dkms+{glvnd}-{os_type}_{architecture}.deb"
         if pc == 'pc':
             driver_name = f"{driver}+dkms+{glvnd}-{pc}_{architecture}.deb"
-        # else:
-        #     # driver_name = f"{commit}+dkms+{glvnd}-{os_type}_{architecture}.deb"
-        #     driver_name = f"{driver}+dkms+{glvnd}-{os_type}_{architecture}.deb"
-        # if work_date > datetime.strptime("20240708","%Y%m%d"):
-        #     driver_name = f"{driver}+dkms+{glvnd}-pc_{architecture}.deb"
-        print(f"{driver_name=}")
+        else:
+            if os_type == 'Kylin':
+                driver_name = f"{driver}+dkms-{os_type}_{architecture}.deb"
+        self.log.logger.info(f"{driver_name=}")
         driver_url = f"https://oss.mthreads.com/product-release/{branch}/{work_date}/{driver_name}"
         fallback_folder = f"/home/{exec_user}/Fallback/DEB_Fallback"
         Pc.wget_url(driver_url,fallback_folder)
         rs = Pc.execute(f"sudo dpkg -P musa && sudo DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true apt install {fallback_folder}/{driver_name} -y --allow-downgrades && \
-                echo 'apt install pass' || echo 'apt install fail'")
+                echo 'apt install pass' || echo 'apt install fail'")[0]
         # check  install command run status;  
         if 'apt install fail' in rs:
             self.log.logger.error(f'"apt install {fallback_folder}/{driver_name} -y"执行报错！')
             return False
-        self.log.logger.info(f'"apt install {fallback_folder}/{driver_name} -y"执行未报错')
+        else:
+            self.log.logger.info(f'"apt install {fallback_folder}/{driver_name} -y"执行未报错')
         # 重启,check install version
         if Pc.reboot_and_reconnect(wait_time=30, retries=10):
             deb_version = self.show_deb()
