@@ -98,32 +98,32 @@ class Fallback:
         pc_info = self.sshclient.info
 
         deb_info_obj = deb_info(branch,begin_date, end_date,pc_info,self.log)
-        deb_info_obj.get_deb_from_oss()
-        # if commit_list:
-        #     commit_list = deb_info_obj.get_commits_from_commit(component,commit_list)
-        #     self.log.logger.info(f"{component} 回退列表为：{commit_list}")
-        #     rs = self.middle_search(component,commit_list)
-        #     if rs:
-        #         self.log.logger.info(f"{component} 回退结果为：\"{rs[-1]}\"引入")
-        #         # self.keylog.keyinfo_logger.info(f"{component} 回退结果为：\"{rs[-1]}\"引入")
-        # else:
-        #     # 获取deb 列表 
-        #     # self.keylog.keyinfo_logger.info("=="*30+"Step 1 - 获取deb列表"+"=="*30)
-        #     driver_list,pc_list = deb_info_obj.get_deb_from_oss()
-        #     self.log.logger.info(f"'deb' 回退列表为：{driver_list}")
-        #     rs = self.middle_search(component,driver_list,pc_list)
-        #     if rs:
-        #         self.log.logger.info(f"deb回退结果为：\"{rs[-1]}\"引入")
-        #         # 获取umd、kmd info，后续可添加video、gmi
-        #         umd_list, kmd_list = deb_info_obj.get_UMD_KMD_commit_from_deb(rs)
-        #         component = 'umd'
-        #         self.log.logger.info(f"{component} 回退列表为：{umd_list}")
-        #         rs = self.middle_search(component,umd_list)
-        #         if not rs: 
-        #             component = 'kmd'
-        #             self.log.logger.info(f"{component} 回退列表为：{kmd_list}")
-        #             rs = self.middle_search(component,kmd_list)
-        #         self.log.logger.info(f"{component} 回退结果为：\"{rs[-1]}\"引入")
+        # deb_info_obj.get_deb_from_oss()
+        if commit_list:
+            commit_list = deb_info_obj.get_commits_from_commit(component,commit_list)
+            self.log.logger.info(f"{component} 回退列表为：{commit_list}")
+            rs = self.middle_search(component,commit_list)
+            if rs:
+                self.log.logger.info(f"{component} 回退结果为：\"{rs[-1]}\"引入")
+                # self.keylog.keyinfo_logger.info(f"{component} 回退结果为：\"{rs[-1]}\"引入")
+        else:
+            # 获取deb 列表 
+            # self.keylog.keyinfo_logger.info("=="*30+"Step 1 - 获取deb列表"+"=="*30)
+            driver_list,pc_list = deb_info_obj.get_deb_from_oss()
+            self.log.logger.info(f"'deb' 回退列表为：{driver_list}")
+            rs = self.middle_search(component,driver_list,pc_list)
+            if rs:
+                self.log.logger.info(f"deb回退结果为：\"{rs[-1]}\"引入")
+                # 获取umd、kmd info，后续可添加video、gmi
+                umd_list, kmd_list = deb_info_obj.get_UMD_KMD_commit_from_deb(rs)
+                component = 'umd'
+                self.log.logger.info(f"{component} 回退列表为：{umd_list}")
+                rs = self.middle_search(component,umd_list)
+                if not rs: 
+                    component = 'kmd'
+                    self.log.logger.info(f"{component} 回退列表为：{kmd_list}")
+                    rs = self.middle_search(component,kmd_list)
+                self.log.logger.info(f"{component} 回退结果为：\"{rs[-1]}\"引入")
 
     def install_umd(self,commit):
         Pc = self.sshclient
@@ -138,6 +138,9 @@ class Fallback:
         self.log.logger.info('=='*10 + f"Installing UMD commit {commit}" + '=='*10)
         fallback_folder = f"/home/{exec_user}/Fallback/UMD_Fallback"
         # 下载
+        # 检测当前环境驱动是否是glvnd 
+        if Pc.check_path("/usr/share/glvnd/egl_vendor.d/00_musa.json"):
+            glvnd = 'glvnd'
         if glvnd == 'glvnd':
             UMD_commit_URL = f"http://oss.mthreads.com/release-ci/gr-umd/{branch}/{commit}_{arch}-mtgpu_linux-xorg-release-hw-{glvnd}.tar.gz"
         else:

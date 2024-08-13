@@ -3,6 +3,7 @@
 import paramiko,sys,time,os
 from paramiko import AuthenticationException
 from paramiko.ssh_exception import SSHException, NoValidConnectionsError
+import datetime,re
 basedir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(basedir)
 from lib.logManager import logManager
@@ -111,28 +112,48 @@ class sshClient():
             result['arch'] = 'arm64'
         return result
     
-    def wget_url(self,url,destination_folder,file_name=None):
+    def wget_url(self,url,local_path=None,file_name=None):
         if not file_name :
             file_name = url.split('/')[-1]
-        destination = f"{destination_folder}/{file_name}"
-        self.execute(f"[ ! -d {destination_folder} ] && mkdir -p {destination_folder}")
-        rs = self.execute(f"wget --no-check-certificate  {url} -O {destination} && echo 'True' ||echo 'False'")[0]
+        if local_path:
+            destination = f"{local_path}/{file_name}"
+            self.execute(f"[ ! -d {local_path} ] && mkdir -p {local_path}")
+            rs = self.execute(f"wget --no-check-certificate  {url} -O {destination} && echo 'True' ||echo 'False'")[0]
+        else:
+            rs = self.execute(f"wget --no-check-certificate  {url} && echo 'True' ||echo 'False'")[0]
         if rs == 'False' :
             self.log.logger.error(f"Download {url} failed !!!")
             # log.logger.error(f"package {file_name} 下载失败！！！")
             return False
         else:
             self.log.logger.info(f"Download {url} success !!!")
-            return True    
+            return True 
+
+    def check_path(self,path):
+        rs = self.execute(f"ls {path} && echo 'True' || echo 'False'")[0]
+        if rs == 'False':
+            return False
+        else:
+            return True
+
 
 if __name__ == '__main__':
-    Pc = sshClient("192.168.114.55","swqa","gfx123456")
-    # if 1000 == Pc.login():
-    display_var = Pc.execute("w -h  | awk '{print $3}'|grep -o '^:[0-9]\+' |head -n 1")[0]
-    # Umd_Version = Pc.execute(f"export DISPLAY={display_var} && glxinfo -B |grep -i 'OpenGL version string'|grep -oP '\\b[0-9a-f]{9}\\b(?=@)'")[0]
-    Umd_Version = Pc.execute(f"export DISPLAY={display_var} && glxinfo -B |grep -i 'OpenGL version string'|grep -oP '\\b[0-9a-f]{{9}}\\b(?=@)'")[0]
+    # Pc = sshClient("192.168.114.55","swqa","gfx123456")
+    Pc = sshClient("192.168.2.131","georgy","123456")
+    # s = Pc.execute('ls /home/georgy/xc_tool/driver/tmp/')
+    stdin, stdout, stderr = Pc.client.exec_command('cat /home/georgy/xc_tool/driver/tmp/1/1')
+    print(f"{stdout.read().decode()=}")
     
-    # rs = Pc.execute(f"export DISPLAY= ; xrandr 2>&1")
-    print(f"{Umd_Version=}")
-    print(Pc.info)
+    # if Pc.check_path("/home/georgy/xc_tool/driver/tmp/"):
+    #     print("HHHH")
+    # else:
+    #     print("FUCK")
+    # if 1000 == Pc.login():
+    # display_var = Pc.execute("w -h  | awk '{print $3}'|grep -o '^:[0-9]\+' |head -n 1")[0]
+    # # Umd_Version = Pc.execute(f"export DISPLAY={display_var} && glxinfo -B |grep -i 'OpenGL version string'|grep -oP '\\b[0-9a-f]{9}\\b(?=@)'")[0]
+    # Umd_Version = Pc.execute(f"export DISPLAY={display_var} && glxinfo -B |grep -i 'OpenGL version string'|grep -oP '\\b[0-9a-f]{{9}}\\b(?=@)'")[0]
+    
+    # # rs = Pc.execute(f"export DISPLAY= ; xrandr 2>&1")
+    # print(f"{Umd_Version=}")
+    # print(Pc.info)
         # Pc.execute("echo -e /usr/lib/$(uname -m)-linux-gnu/musa |sudo tee /etc/ld.so.conf.d/00-mtgpu.conf")
