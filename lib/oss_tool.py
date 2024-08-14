@@ -66,6 +66,14 @@ class OSSTool:
                 f.write(response)
         return response
 
+    def show_text(self,path):
+        url = f"https://oss.mthreads.com/{path}"
+        request = urllib.request.Request(url=url, method='GET')
+        response_text = urllib.request.urlopen(request).read().decode('utf-8')
+        # print(response_text)
+        return response_text
+        
+
     #TO DO
     def upload(self, path):
         pass
@@ -91,7 +99,9 @@ class OSSTool:
 if __name__ == "__main__":
     o = OSSTool('mtoss', 'mtoss123')
     # print(o.ls('release-ci', '/gr-umd/release-kylin-desktop-v1.0/dkms-deb/'))
-    print(o.ls('product-release', '/develop/20240809/'))
+    s =  o.ls('product-release', '/develop/20231103/')
+    print(f"{type(s)=}\n{s=}")
+    o.show_txt('product-release/develop/20240808/daily_build_pc.txt')
     # rs = o.download('/product-release/ddk_release/Kylin_integration/Kylin2209_integration_1.0.29/musa_1.0.29-kylin_version_info.txt')
     # rs = o.download('/product-release/develop/20230209/musa_2023.02.09-D2757Ubuntu_amd64-pstate.deb')
     # print(rs.decode())
