@@ -269,7 +269,6 @@ class deb_info:
         # branch, begin_time, end_time = (self.branch,self.begin_date,self.end_date)
         branch  = self.branch
         commits = []
-        commit_list = []
         latest_commits = {}
         data = {
             # http://192.168.114.118/td/code_commit/list
@@ -291,8 +290,8 @@ class deb_info:
             commit_time = commit['commit_time']
             # if commit_time not in latest_commits or  commit['commit_time'] in latest_commits:
             latest_commits[commit_time] = commit
-        result_commit_ids = [commit['short_id'] for commit in latest_commits.values()]
-        return result_commit_ids
+        commits = [commit['short_id'] for commit in latest_commits.values()]
+        return commits
 
     # 应该用git获取最好
     # 进入代码目录，
@@ -357,7 +356,6 @@ class deb_info:
                 remove_result.append(commit)
         if remove_result:
             self.log.logger.info(f"因oss地址不存在移除{repo}列表{remove_result}")
-        print(result)
         return result
         
     # 增加一个需求，根据short_id去找到 完整commitID

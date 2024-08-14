@@ -99,8 +99,8 @@ def getCommit(repo, branch, begin_time, end_time):
 if __name__ == "__main__":
     myminio = minio()
     # print(myminio.list("product-release", "/develop/20240101/"))
-    myminio.upload('tmp', '/junhui.yan/uos+x300.txt', "/home/swqa/uos+x300.txt")
-    # print(myminio.show("product-release", "/test-dawei/20240308/musa_2024.03.08-release-2.5.0+9795_info.txt"))
+    # myminio.upload('tmp', '/junhui.yan/uos+x300.txt', "/home/swqa/uos+x300.txt")
+    print(myminio.show("product-release", "/develop/20240808/daily_build_pc.txt"))
     # myminio.download("product-release", "/test-dawei/20240308/musa_2024.03.08-release-2.5.0+9795_info.txt", "./musa_2024.03.08-release-2.5.0+9795_info.txt")
 
     # print(getCommit("gr-kmd", "develop", "2024-02-29 00:00:00", "2024-03-01 00:00:00"))
