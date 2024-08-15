@@ -343,6 +343,9 @@ class deb_info:
                     pc = pc_list[check_list.index(commit)]
                     if pc == 'pc':
                         driver_name = f"{commit}+dkms+{glvnd}-{pc}_{architecture}.deb"
+                    else:
+                        if os_type == 'Kylin':
+                            driver_name = f"{commit}+dkms-{os_type}_{architecture}.deb"
                 work_date = re.search(r"\d{4}.\d{2}.\d{2}",commit)
                 work_date = work_date.group()
                 work_date = datetime.datetime.strptime(work_date, "%Y.%m.%d").strftime("%Y%m%d")
