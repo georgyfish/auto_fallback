@@ -80,7 +80,7 @@ class deb_info:
         result = self.Check_Driver_URL('deb',result,pc_list)
         return result,pc_list
 
-    def daily_build(self,work_date):
+    def daily_build_pc(self,work_date):
         if self.oss.ls('product-release',f'/{self.branch}/{work_date}/daily_build_pc.txt'):
             driver = self.oss.show_text(f'product-release/{self.branch}/{work_date}/daily_build_pc.txt').splitlines()[0]
             driver_name = f"{driver}+dkms+{self.glvnd}-pc_{self.architecture}.deb"
@@ -89,41 +89,65 @@ class deb_info:
                 return driver,pc
             else:
                 return self.no_daily_build(work_date)
-        elif self.oss.ls('product-release',f'/{self.branch}/{work_date}/daily_build.txt'):
-            driver = self.oss.show_text(f'product-release/{self.branch}/{work_date}/daily_build.txt').splitlines()[0]
-            driver_name = f"{driver}+dkms+{self.glvnd}-{self.os_type}_{self.architecture}.deb"
-            if self.os_type == 'Kylin':
-                driver_name = f"{driver}+dkms-{self.os_type}_{self.architecture}.deb"
-            if self.os_type == 'Ubuntu':
-                if self.architecture != 'amd64':
-                    self.log.logger.error("不支持的架构")
-                    return None
-            if self.oss.ls('product-release',f'/{self.branch}/{work_date}/{driver_name}'):
-                pc = 'os_type'
-                return driver,pc
-            else:
-                return self.no_daily_build(work_date)
+        # elif self.oss.ls('product-release',f'/{self.branch}/{work_date}/daily_build.txt'):
+        #     driver = self.oss.show_text(f'product-release/{self.branch}/{work_date}/daily_build.txt').splitlines()[0]
+        #     driver_name = f"{driver}+dkms+{self.glvnd}-{self.os_type}_{self.architecture}.deb"
+        #     if self.os_type == 'Kylin':
+        #         driver_name = f"{driver}+dkms-{self.os_type}_{self.architecture}.deb"
+        #     if self.os_type == 'Ubuntu':
+        #         if self.architecture != 'amd64':
+        #             self.log.logger.error("不支持的架构")
+        #             return None
+        #     if self.oss.ls('product-release',f'/{self.branch}/{work_date}/{driver_name}'):
+        #         pc = 'os_type'
+        #         return driver,pc
+        #     else:
+        #         return self.no_daily_build(work_date)
         else:
             return self.no_daily_build(work_date)
-        
+
+
     def no_daily_build(self,work_date):
         build_ids = []
         files = []
         file_list = self.oss.ls('product-release',f'/{self.branch}/{work_date}/')
         if file_list:
-            for file in file_list:
-                files.append(file['name'].split('/')[-1])
-            for file in files:
-                if file.endswith(f'{self.os_type}_{self.architecture}.deb') and 'server' not in file:
-                    build_id = file.split('+')[1]
-                    build_ids.append(build_id)
-            if  build_ids:
-                for file in files:
-                    if file.endswith(f'{self.os_type}_{self.architecture}.deb') and 'server' not in file and max(build_ids,key=int) in file:
-                        drivername = file.split('/')[-1]
-                        driver = '+'.join(drivername.split('+')[:2])
-                        pc = 'old_build' 
+            files = list(map(lambda file:file['name'].split('/')[-1], file_list))
+            files = list(filter(lambda file:file.endswith(f'pc_{self.architecture}.deb') and 'server' not in file,files))
+            if files:
+                pc = 'pc'
+            else:
+                pc = 'os_type'
+                if self.oss.ls('product-release',f'/{self.branch}/{work_date}/daily_build.txt'):
+                    driver = self.oss.show_text(f'product-release/{self.branch}/{work_date}/daily_build.txt').splitlines()[0]
+                    driver_name = f"{driver}+dkms+{self.glvnd}-{self.os_type}_{self.architecture}.deb"
+                    if self.os_type == 'Kylin':
+                        driver_name = f"{driver}+dkms-{self.os_type}_{self.architecture}.deb"
+                    if self.os_type == 'Ubuntu' and self.architecture != 'amd64':
+                        self.log.logger.error(f"oss/product-release/{self.branch}/{work_date}/下不存在支持的驱动")
+                        return None
+                    elif self.oss.ls('product-release',f'/{self.branch}/{work_date}/{driver_name}'):
                         return driver,pc
+                else:
+                    files = list(filter(lambda file:file.endswith(f'{self.os_type}_{self.architecture}.deb') and 'server' not in file,files))
+            build_ids = list(map(lambda file:file.split('+')[1]),files)
+            if build_ids:
+                driver = list(filter(lambda file:max(build_ids,key=int) in file, files))
+                driver = '+'.join(driver[0].split('+')[:2])
+                return driver,pc
+            # for file in file_list:
+            #     files.append(file['name'].split('/')[-1])
+            # for file in files:
+            #     if file.endswith(f'{self.os_type}_{self.architecture}.deb') and 'server' not in file:
+            #         build_id = file.split('+')[1]
+            #         build_ids.append(build_id)
+            # if  build_ids:
+            #     for file in files:
+            #         if file.endswith(f'{self.os_type}_{self.architecture}.deb') and 'server' not in file and max(build_ids,key=int) in file:
+            #             drivername = file.split('/')[-1]
+            #             driver = '+'.join(drivername.split('+')[:2])
+            #             pc = 'old_build' 
+            #             return driver,pc
             else:
                 return  None
         else:
@@ -135,7 +159,7 @@ class deb_info:
         pc_list = []
         self.log.logger.info(f"查找日期{self.begin_date}-{self.end_date}：")
         for work_date in self.work_date_list:
-            rs =  self.daily_build(work_date)
+            rs =  self.daily_build_pc(work_date)
             if  rs :
                 driver,pc = rs
                 pc_list.append(pc)

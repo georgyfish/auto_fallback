@@ -60,6 +60,14 @@ class GitCommitInfo():
             result = list(filter(lambda arr:arr[1] >=start_time_o and arr[1] <= end_time_o, result))
         return result
 
+    def get_commits(self, repo, branch,  commit_list):
+        start = commit_list[0]
+        end = commit_list[-1]
+        start_time = self.get_submit_time(repo,branch,start)
+        end_time = self.get_submit_time(repo, branch, end)
+        result = self.get(repo, branch, start_time, end_time)
+        return result
+
 if __name__ == '__main__':
     o = GitCommitInfo()
     o.update()
