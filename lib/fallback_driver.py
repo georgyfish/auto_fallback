@@ -54,6 +54,9 @@ class Fallback:
         left = 0 
         right = len(search_list) - 1
         count = 1
+        if left == right:
+            self.log.logger.info(f"{repo}-{search_list}长度为1，无需回退！")
+            return None
         if repo == 'deb':
             data[right][-1] =  "fail"
             if pc_list:
@@ -71,7 +74,6 @@ class Fallback:
             middle = (left + right )//2 
             count += 1 
             # 查找进度打印
-
             if repo == 'deb' and pc_list:
                 data[middle][-1] = self.install_driver(repo,search_list[middle],pc_list[middle])
             else:
@@ -105,17 +107,16 @@ class Fallback:
             rs = self.middle_search(component,commit_list)
             if rs:
                 self.log.logger.info(f"{component} 回退结果为：\"{rs[-1]}\"引入")
-                # self.keylog.keyinfo_logger.info(f"{component} 回退结果为：\"{rs[-1]}\"引入")
         else:
             # 获取deb 列表 
-            # self.keylog.keyinfo_logger.info("=="*30+"Step 1 - 获取deb列表"+"=="*30)
             driver_list,pc_list = deb_info_obj.get_deb_from_oss()
             self.log.logger.info(f"'deb' 回退列表为：{driver_list}")
             rs = self.middle_search(component,driver_list,pc_list)
+            # rs= ["musa_2024.07.25-D+444","musa_2024.07.26-D+451"]
             if rs:
                 self.log.logger.info(f"deb回退结果为：\"{rs[-1]}\"引入")
                 # 获取umd、kmd info，后续可添加video、gmi
-                umd_list, kmd_list = deb_info_obj.get_UMD_KMD_commit_from_deb(rs)
+                umd_list, kmd_list = deb_info_obj.get_commit_from_deb(rs)
                 component = 'umd'
                 self.log.logger.info(f"{component} 回退列表为：{umd_list}")
                 rs = self.middle_search(component,umd_list)

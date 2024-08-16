@@ -21,7 +21,9 @@ class GitCommitInfo():
 
     def get_git_commit_info(self, repo, branch):
         result = []
-        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..','app','db','code', repo)
+        # path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..','app','db','code', repo)
+        path = os.path.join('/var','www','data','testdata_viewer','app','db','code', repo)
+        # print(path)
         cmd = f"cd {path};git checkout {branch};git branch -u origin/{branch} {branch};git fetch"
         rs = subprocess.Popen(cmd, shell=True, close_fds=True, stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.PIPE, preexec_fn = os.setsid, encoding="utf-8")
         rs.communicate(timeout=30)
@@ -48,7 +50,7 @@ class GitCommitInfo():
         if result:
             result = list(filter(lambda arr:arr[0][:9] == commit_id, result))
             submit_time = result[0][1].strftime('%Y-%m-%d %H:%M:%S')
-        return submit_time
+            return submit_time
 
     def get(self, repo, branch, start_time, end_time):
         result = self.commit_info.get(repo)
@@ -65,14 +67,23 @@ class GitCommitInfo():
         end = commit_list[-1]
         start_time = self.get_submit_time(repo,branch,start)
         end_time = self.get_submit_time(repo, branch, end)
-        result = self.get(repo, branch, start_time, end_time)
-        return result
+        commits = self.get(repo, branch, start_time, end_time)
+        unique_commit_ids = []
+        seen_times = set()
+        for commit in commits:
+            commit_id = commit[0]
+            commit_time = commit[1]
+            if commit_time not in seen_times:
+                unique_commit_ids.append(commit_id[:9])
+                seen_times.add(commit_time)
+        return unique_commit_ids[::-1]
 
 if __name__ == '__main__':
     o = GitCommitInfo()
     o.update()
     # print(o.commit_info)
-    print(o.get('gr-umd','develop','2024-07-22 00:00:00','2024-07-24 23:20:35'))
+    # print(o.get('gr-umd','develop','2024-07-22 00:00:00','2024-07-24 23:20:35'))
+    print(o.get_commits('gr-umd','develop',['c32938d06', 'e7a32893b']))
     # print(o.get('gr-umd','release-2.5.0','2023-10-12 14:20:35','2023-10-22 14:20:35'))
     # print(o.get_submit_time('gr-umd', 'develop', 'bae16c398'))
     #print(o.get('gr-umd','develop','2023-04-17 14:20:35','2023-04-22 14:20:35'))

@@ -8,6 +8,7 @@ basedir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(basedir)
 # from lib.logManager import logManager
 from lib.oss_tool import OSSTool
+from lib.git_lib import GitCommitInfo
 
 class deb_info:
     def __init__(self,branch,begin_date,end_date,pc_info,Log):
@@ -89,20 +90,6 @@ class deb_info:
                 return driver,pc
             else:
                 return self.no_daily_build(work_date)
-        # elif self.oss.ls('product-release',f'/{self.branch}/{work_date}/daily_build.txt'):
-        #     driver = self.oss.show_text(f'product-release/{self.branch}/{work_date}/daily_build.txt').splitlines()[0]
-        #     driver_name = f"{driver}+dkms+{self.glvnd}-{self.os_type}_{self.architecture}.deb"
-        #     if self.os_type == 'Kylin':
-        #         driver_name = f"{driver}+dkms-{self.os_type}_{self.architecture}.deb"
-        #     if self.os_type == 'Ubuntu':
-        #         if self.architecture != 'amd64':
-        #             self.log.logger.error("不支持的架构")
-        #             return None
-        #     if self.oss.ls('product-release',f'/{self.branch}/{work_date}/{driver_name}'):
-        #         pc = 'os_type'
-        #         return driver,pc
-        #     else:
-        #         return self.no_daily_build(work_date)
         else:
             return self.no_daily_build(work_date)
 
@@ -130,24 +117,12 @@ class deb_info:
                         return driver,pc
                 else:
                     files = list(filter(lambda file:file.endswith(f'{self.os_type}_{self.architecture}.deb') and 'server' not in file,files))
-            build_ids = list(map(lambda file:file.split('+')[1]),files)
+            for file in files:
+                build_ids.append(file.split('+')[1])
             if build_ids:
                 driver = list(filter(lambda file:max(build_ids,key=int) in file, files))
                 driver = '+'.join(driver[0].split('+')[:2])
                 return driver,pc
-            # for file in file_list:
-            #     files.append(file['name'].split('/')[-1])
-            # for file in files:
-            #     if file.endswith(f'{self.os_type}_{self.architecture}.deb') and 'server' not in file:
-            #         build_id = file.split('+')[1]
-            #         build_ids.append(build_id)
-            # if  build_ids:
-            #     for file in files:
-            #         if file.endswith(f'{self.os_type}_{self.architecture}.deb') and 'server' not in file and max(build_ids,key=int) in file:
-            #             drivername = file.split('/')[-1]
-            #             driver = '+'.join(drivername.split('+')[:2])
-            #             pc = 'old_build' 
-            #             return driver,pc
             else:
                 return  None
         else:
@@ -204,30 +179,22 @@ class deb_info:
             self.log.logger.error(f"list index out of range! {start_end_list} not in {full_list}")
             sys.exit(-1)
 
-    def get_commit_from_deb_info(self,deb_version):
+    def get_commit_from_info(self,deb_version):
         branch = self.branch
         deb_date = re.search(r'\d{4}\.\d{2}\.\d{2}',deb_version).group()
         deb_date = datetime.datetime.strptime(deb_date,"%Y.%m.%d").strftime("%Y%m%d")
-        # 
         deb_version = deb_info.url_encode(deb_version)
         url = f"https://oss.mthreads.com/product-release/{branch}/{deb_date}/{deb_version}_info.txt"
-        # url = os.path.join("https://oss.mthreads.com/product-release/",branch,deb_date,name)
-        #url需要转换编码为urlencode
-        # requests.get需要认证，暂时会报错，使用curl获取
         response = requests.get(url)
         response.raise_for_status()
         commit_list = response.text.splitlines()
+        result = {}
         for commit in commit_list:
             key = commit.split(':')[0]
-            value = commit.split(':')[1]
-            if key == 'kmd':
-                # 去除开头的空格
-                kmd_commit = value.lstrip()
-            if key == 'umd':
-                umd_commit = value.lstrip()
-        # print(umd_commit,kmd_commit)
-        self.log.logger.info(f"{deb_date=}\n{umd_commit=}\t{kmd_commit=}")
-        return umd_commit,kmd_commit
+            value = commit.split(':')[1].lstrip()
+            result[key] = value
+        self.log.logger.info(f"{deb_date=}\ndeb_info={result}\t")
+        return result
     
     @staticmethod
     def url_encode(string):
@@ -240,10 +207,11 @@ class deb_info:
         gr_umd_start_end = []
         gr_kmd_start_end = []
         for deb_version in deb_list:
-            umd_commit,kmd_commit = self.get_commit_from_deb_info(deb_version)
+            rs = self.get_commit_from_info(deb_version)
+            umd_commit,kmd_commit = rs['umd'],rs['kmd']
             gr_umd_start_end.append(umd_commit)
             gr_kmd_start_end.append(kmd_commit)
-        self.log.logger.info(f"{gr_umd_start_end=}\n{gr_kmd_start_end=}\n")
+        self.log.logger.info(f"\n{gr_umd_start_end=}\n{gr_kmd_start_end=}")
         return gr_umd_start_end,gr_kmd_start_end
 
     # 通过repo_tag.txt获取commit信息
@@ -262,30 +230,38 @@ class deb_info:
             self.log.logger.error(f"An unexpected error occurred: \n{e}")
         return umd_commit,kmd_commit
 
-
+    # 通过git获取commits列表
+    def get_commit_from_deb(self,deb_list):
+        gr_umd_start_end,gr_kmd_start_end = self.get_UMD_KMD_commit_from_deb_info(deb_list)
+        o = GitCommitInfo()
+        o.update()
+        umd_search_list = self.Check_Driver_URL('umd',o.get_commits('gr-umd',self.branch, gr_umd_start_end))
+        kmd_search_list = self.Check_Driver_URL('kmd',o.get_commits('gr-kmd',self.branch, gr_kmd_start_end))
+        return umd_search_list,kmd_search_list
+    
+    # """
     # 通过deb日期 repo_tag获取commit信息
     # 两版deb驱动，分别根据repo_tag.txt获取2笔UMD、2笔KMD区间
     # 根据两版deb驱动版本，得到它们的日期，（适用于develop）
     # 根据日期，获取commit列表
     # 截取UMD区间的头尾commit在commit列表中的index序号，切片commit列表
     # 检查每个commit的URL，过滤无法下载的；
-    def get_UMD_KMD_commit_from_deb(self,deb_list):
-        gr_umd_start_end,gr_kmd_start_end = self.get_UMD_KMD_commit_from_deb_info(deb_list)
-        begin_date = re.search(r"\d{4}.\d{2}.\d{2}",deb_list[0]).group()
-        end_date = re.search(r"\d{4}.\d{2}.\d{2}",deb_list[1]).group()
-        previous_day = datetime.datetime.strptime(begin_date,"%Y.%m.%d") - datetime.timedelta(days=1)
-        # 设置开始时间为前一天12:00，结束时间为当天的23:00
-        commit_begin_date = previous_day.replace(hour=12, minute=0, second=0).strftime("%Y-%m-%d %H:%M:%S")
-        commit_end_date = datetime.datetime.strptime(end_date,"%Y.%m.%d").replace(hour=23,minute=0,second=0).strftime("%Y-%m-%d %H:%M:%S")
-        # 格式化输出
-        self.log.logger.info(f"commit查询开始时间：{commit_begin_date}\ncommit查询结束时间：{commit_end_date}\n")    
-        umd_list = self.get_commits_from_date("gr-umd", commit_begin_date , commit_end_date)
-        kmd_list = self.get_commits_from_date("gr-kmd", commit_begin_date , commit_end_date)
-        self.log.logger.info(f"{umd_list=}\n{kmd_list=}\n")
-        # umd_search_list , kmd_search_list = self.slice_full_list(gr_umd_start_end,umd_list) , self.slice_full_list(gr_kmd_start_end,kmd_list)
-        umd_search_list,kmd_search_list = self.Check_Driver_URL("umd",self.slice_full_list(gr_umd_start_end,umd_list)),self.Check_Driver_URL("kmd",self.slice_full_list(gr_kmd_start_end,kmd_list))
-        self.log.logger.info(f"{umd_search_list=}\n{kmd_search_list=}\n")
-        return umd_search_list,kmd_search_list
+    # """
+        # begin_date = re.search(r"\d{4}.\d{2}.\d{2}",deb_list[0]).group()
+        # end_date = re.search(r"\d{4}.\d{2}.\d{2}",deb_list[1]).group()
+        # previous_day = datetime.datetime.strptime(begin_date,"%Y.%m.%d") - datetime.timedelta(days=1)
+        # # 设置开始时间为前一天12:00，结束时间为当天的23:00
+        # commit_begin_date = previous_day.replace(hour=12, minute=0, second=0).strftime("%Y-%m-%d %H:%M:%S")
+        # commit_end_date = datetime.datetime.strptime(end_date,"%Y.%m.%d").replace(hour=23,minute=0,second=0).strftime("%Y-%m-%d %H:%M:%S")
+        # # 格式化输出
+        # self.log.logger.info(f"commit查询开始时间：{commit_begin_date}\ncommit查询结束时间：{commit_end_date}\n")    
+        # umd_list = self.get_commits_from_date("gr-umd", commit_begin_date , commit_end_date)
+        # kmd_list = self.get_commits_from_date("gr-kmd", commit_begin_date , commit_end_date)
+        # self.log.logger.info(f"{umd_list=}\n{kmd_list=}\n")
+        # # umd_search_list , kmd_search_list = self.slice_full_list(gr_umd_start_end,umd_list) , self.slice_full_list(gr_kmd_start_end,kmd_list)
+        # umd_search_list,kmd_search_list = self.Check_Driver_URL("umd",self.slice_full_list(gr_umd_start_end,umd_list)),self.Check_Driver_URL("kmd",self.slice_full_list(gr_kmd_start_end,kmd_list))
+        # self.log.logger.info(f"{umd_search_list=}\n{kmd_search_list=}\n")
+        # return umd_search_list,kmd_search_list
 
 
     # 通过日期获取commit列表
@@ -317,26 +293,21 @@ class deb_info:
         commits = [commit['short_id'] for commit in latest_commits.values()]
         return commits
 
-    # 应该用git获取最好
-    # 进入代码目录，
-    # branch = f"git branch --contains {commit}" 
-    # git log -1 abc123
-    # git show {commit}
-    def get_commits_from_commit(self,component,commit_list):
-        end_date = datetime.datetime.today() + datetime.timedelta(1)
-        begin_date = end_date - datetime.timedelta(365)
-        end_date = end_date.strftime("%Y-%m-%d %H:%M:%S")
-        begin_date = begin_date.strftime("%Y-%m-%d %H:%M:%S")
-        if component == 'umd':
-            umd_list = self.get_commits_from_date("gr-umd", begin_date , end_date)
-            umd_search_list = self.Check_Driver_URL("umd",self.slice_full_list(commit_list,umd_list))
-            self.log.logger.info(f"{umd_search_list=}")
-            return umd_search_list
-        else:
-            kmd_list = self.get_commits_from_date("gr-kmd", begin_date , end_date)
-            kmd_search_list = self.Check_Driver_URL("kmd",self.slice_full_list(commit_list,kmd_list))
-            self.log.logger.info(f"{kmd_search_list=}\n")
-            return kmd_search_list
+    # def get_commits_from_commit(self,component,commit_list):
+    #     end_date = datetime.datetime.today() + datetime.timedelta(1)
+    #     begin_date = end_date - datetime.timedelta(365)
+    #     end_date = end_date.strftime("%Y-%m-%d %H:%M:%S")
+    #     begin_date = begin_date.strftime("%Y-%m-%d %H:%M:%S")
+    #     if component == 'umd':
+    #         umd_list = self.get_commits_from_date("gr-umd", begin_date , end_date)
+    #         umd_search_list = self.Check_Driver_URL("umd",self.slice_full_list(commit_list,umd_list))
+    #         self.log.logger.info(f"{umd_search_list=}")
+    #         return umd_search_list
+    #     else:
+    #         kmd_list = self.get_commits_from_date("gr-kmd", begin_date , end_date)
+    #         kmd_search_list = self.Check_Driver_URL("kmd",self.slice_full_list(commit_list,kmd_list))
+    #         self.log.logger.info(f"{kmd_search_list=}\n")
+    #         return kmd_search_list
     
     def Check_Driver_URL(self,repo,check_list,pc_list=None):
         branch,arch,glvnd,os_type,architecture = (
@@ -354,7 +325,7 @@ class deb_info:
             if repo == 'umd':
                 bucket = 'release-ci'
                 path = f'/gr-umd/{branch}/{commit}_{arch}-mtgpu_linux-xorg-release-hw-{glvnd}.tar.gz'
-                if glvnd:
+                if not glvnd:
                     path = f'/gr-umd/{branch}/{commit}_{arch}-mtgpu_linux-xorg-release-hw.tar.gz'
             elif repo == 'kmd':
                 bucket = 'sw-build'
