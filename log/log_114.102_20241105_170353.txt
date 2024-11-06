@@ -1,0 +1,14 @@
+2024-11-05 17:03:53,105 - ssh - sshClient.py[line:28] - INFO - Connect to 'swqa@192.168.114.102/22' PassWd: gfx123456
+2024-11-05 17:03:53,261 - ssh - sshClient.py[line:49] - INFO - Execute "cat /etc/lsb-release | head -n 1 | awk -F '='  '{print $2}'"
+2024-11-05 17:03:53,531 - ssh - sshClient.py[line:52] - INFO - Ubuntu
+2024-11-05 17:03:53,532 - ssh - sshClient.py[line:49] - INFO - Execute "dpkg --print-architecture"
+2024-11-05 17:03:53,584 - ssh - sshClient.py[line:52] - INFO - amd64
+2024-11-05 17:03:53,585 - ssh - sshClient.py[line:49] - INFO - Execute "uname -m"
+2024-11-05 17:03:53,636 - ssh - sshClient.py[line:52] - INFO - x86_64
+2024-11-05 17:03:53,637 - ssh - sshClient.py[line:49] - INFO - Execute "uname -r"
+2024-11-05 17:03:53,688 - ssh - sshClient.py[line:52] - INFO - 5.15.0-105-generic
+2024-11-05 17:03:53,689 - ssh - sshClient.py[line:49] - INFO - Execute "systemctl status display-manager.service|grep 'Main PID'  |grep -oP '\(\K[^)]+'"
+2024-11-05 17:03:53,755 - ssh - sshClient.py[line:52] - INFO - lightdm
+2024-11-05 17:03:53,756 - ssh - sshClient.py[line:49] - INFO - Execute "ps -ef |grep '/lib/systemd/systemd --user'|grep -v grep|awk -F' ' '{print $1}'|grep -vE 'lightdm|gdm'"
+2024-11-05 17:03:53,815 - ssh - sshClient.py[line:52] - INFO - swqa
+2024-11-05 17:03:56,316 - Fallback - get_driver_info.py[line:137] - INFO - 查找日期20240301-20241104：

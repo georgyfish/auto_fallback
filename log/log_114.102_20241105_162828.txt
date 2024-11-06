@@ -1,0 +1,21 @@
+2024-11-05 16:28:28,856 - ssh - sshClient.py[line:28] - INFO - Connect to 'swqa@192.168.114.102/22' PassWd: gfx123456
+2024-11-05 16:28:29,011 - ssh - sshClient.py[line:49] - INFO - Execute "cat /etc/lsb-release | head -n 1 | awk -F '='  '{print $2}'"
+2024-11-05 16:28:29,282 - ssh - sshClient.py[line:52] - INFO - Ubuntu
+2024-11-05 16:28:29,282 - ssh - sshClient.py[line:49] - INFO - Execute "dpkg --print-architecture"
+2024-11-05 16:28:29,327 - ssh - sshClient.py[line:52] - INFO - amd64
+2024-11-05 16:28:29,327 - ssh - sshClient.py[line:49] - INFO - Execute "uname -m"
+2024-11-05 16:28:29,372 - ssh - sshClient.py[line:52] - INFO - x86_64
+2024-11-05 16:28:29,373 - ssh - sshClient.py[line:49] - INFO - Execute "uname -r"
+2024-11-05 16:28:29,417 - ssh - sshClient.py[line:52] - INFO - 5.15.0-105-generic
+2024-11-05 16:28:29,418 - ssh - sshClient.py[line:49] - INFO - Execute "systemctl status display-manager.service|grep 'Main PID'  |grep -oP '\(\K[^)]+'"
+2024-11-05 16:28:29,509 - ssh - sshClient.py[line:52] - INFO - code=exited, status=0/SUCCESS
+2024-11-05 16:28:29,510 - ssh - sshClient.py[line:49] - INFO - Execute "ps -ef |grep '/lib/systemd/systemd --user'|grep -v grep|awk -F' ' '{print $1}'|grep -vE 'lightdm|gdm'"
+2024-11-05 16:28:29,572 - ssh - sshClient.py[line:52] - INFO - swqa
+2024-11-05 16:28:35,982 - Fallback - get_driver_info.py[line:135] - INFO - 查找日期20240816-20241104：
+2024-11-05 16:29:17,676 - Fallback - get_driver_info.py[line:146] - INFO - 因oss地址下不存在文件移除 ['20240926', '20241001', '20241002', '20241003', '20241004', '20241014', '20241015', '20241016', '20241017', '20241018', '20241021', '20241022', '20241024', '20241025', '20241028', '20241029', '20241030', '20241031', '20241101', '20241104']
+2024-11-05 16:29:17,676 - Fallback - fallback_driver.py[line:113] - INFO - 'deb' 回退列表为：['musa_2024.08.16-2.7.0-rc4+551', 'musa_2024.08.19-2.7.0-rc4+556', 'musa_2024.08.20-2.7.0-rc4+559', 'musa_2024.08.21-2.7.0-rc4+564', 'musa_2024.08.22-2.7.0-rc4+568', 'musa_2024.08.23-2.7.0-rc4+574', 'musa_2024.08.26-2.7.0-rc4+581', 'musa_2024.08.27-2.7.0-rc4+589', 'musa_2024.08.28-2.7.0-rc4+595', 'musa_2024.08.29-2.7.0-rc4+603', 'musa_2024.08.30-2.7.0-rc4+610', 'musa_2024.09.02-2.7.0-rc4+617', 'musa_2024.09.03-2.7.0-rc4+622', 'musa_2024.09.04-2.7.0-rc4+627', 'musa_2024.09.05-2.7.0-rc4+633', 'musa_2024.09.06-2.7.0-rc4+637', 'musa_2024.09.09-2.7.0-rc4+644', 'musa_2024.09.10-2.7.0-rc4+666', 'musa_2024.09.11-2.7.0-rc4+681', 'musa_2024.09.12-2.7.0-rc4+695', 'musa_2024.09.13-2.7.0-rc4+703', 'musa_2024.09.16-2.7.0-rc4+714', 'musa_2024.09.17-2.7.0-rc4+719', 'musa_2024.09.18-2.7.0-rc4+724', 'musa_2024.09.19-2.7.0-rc4+729', 'musa_2024.09.20-2.7.0-rc4+734', 'musa_2024.09.23-2.7.0-rc4+744', 'musa_2024.09.24-2.7.0-rc4+752', 'musa_2024.09.25-2.7.0-rc4+763', 'musa_2024.09.27-2.7.0-rc4+780', 'musa_2024.09.30-2.7.0-rc4+801', 'musa_2024.10.07-2.7.0-rc4+826', 'musa_2024.10.08-2.7.0-rc4+836', 'musa_2024.10.09-2.7.0-rc4+843', 'musa_2024.10.10-2.7.0-rc4+850', 'musa_2024.10.11-2.7.0-rc4+857', 'musa_2024.10.23-2.7.0-rc4+938']
+2024-11-05 16:29:17,676 - Fallback - fallback_driver.py[line:239] - INFO - ====================Installing  driver musa_2024.08.16-2.7.0-rc4+551====================
+2024-11-05 16:29:17,677 - Fallback - fallback_driver.py[line:249] - INFO - driver_name='musa_2024.08.16-2.7.0-rc4+551+dkms+glvnd-pc_amd64.deb'
+2024-11-05 16:29:17,677 - ssh - sshClient.py[line:49] - INFO - Execute "[ ! -d /home/swqa/Fallback/DEB_Fallback ] && mkdir -p /home/swqa/Fallback/DEB_Fallback"
+2024-11-05 16:29:17,684 - ssh - sshClient.py[line:52] - INFO - 
+2024-11-05 16:29:17,685 - ssh - sshClient.py[line:49] - INFO - Execute "wget --no-check-certificate  https://oss.mthreads.com/product-release/release-2.7.0-rc4/20240816/musa_2024.08.16-2.7.0-rc4+551+dkms+glvnd-pc_amd64.deb -O /home/swqa/Fallback/DEB_Fallback/musa_2024.08.16-2.7.0-rc4+551+dkms+glvnd-pc_amd64.deb && echo 'True' ||echo 'False'"

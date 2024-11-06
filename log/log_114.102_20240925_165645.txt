@@ -1,0 +1,20 @@
+2024-09-25 16:56:45,713 - ssh - sshClient.py[line:28] - INFO - Connect to 'swqa@192.168.114.102/22' PassWd: gfx123456
+2024-09-25 16:56:45,859 - ssh - sshClient.py[line:49] - INFO - Execute "cat /etc/lsb-release | head -n 1 | awk -F '='  '{print $2}'"
+2024-09-25 16:56:45,924 - ssh - sshClient.py[line:52] - INFO - Ubuntu
+2024-09-25 16:56:45,925 - ssh - sshClient.py[line:49] - INFO - Execute "dpkg --print-architecture"
+2024-09-25 16:56:45,972 - ssh - sshClient.py[line:52] - INFO - amd64
+2024-09-25 16:56:45,973 - ssh - sshClient.py[line:49] - INFO - Execute "uname -m"
+2024-09-25 16:56:45,977 - ssh - sshClient.py[line:52] - INFO - x86_64
+2024-09-25 16:56:45,977 - ssh - sshClient.py[line:49] - INFO - Execute "uname -r"
+2024-09-25 16:56:45,980 - ssh - sshClient.py[line:52] - INFO - 5.15.0-43-generic
+2024-09-25 16:56:45,980 - ssh - sshClient.py[line:49] - INFO - Execute "systemctl status display-manager.service|grep 'Main PID'  |grep -oP '\(\K[^)]+'"
+2024-09-25 16:56:45,995 - ssh - sshClient.py[line:52] - INFO - gdm3
+2024-09-25 16:56:45,995 - ssh - sshClient.py[line:49] - INFO - Execute "ps -ef |grep '/lib/systemd/systemd --user'|grep -v grep|awk -F' ' '{print $1}'|grep -vE 'lightdm|gdm'"
+2024-09-25 16:56:46,006 - ssh - sshClient.py[line:52] - INFO - swqa
+2024-09-25 16:56:46,210 - Fallback - get_driver_info.py[line:135] - INFO - 查找日期20240924-20240925：
+2024-09-25 16:56:47,114 - Fallback - fallback_driver.py[line:113] - INFO - 'deb' 回退列表为：['musa_2024.09.24-D+750', 'musa_2024.09.25-D+759']
+2024-09-25 16:56:47,114 - Fallback - fallback_driver.py[line:239] - INFO - ====================Installing  driver musa_2024.09.24-D+750====================
+2024-09-25 16:56:47,114 - Fallback - fallback_driver.py[line:249] - INFO - driver_name='musa_2024.09.24-D+750+dkms+glvnd-pc_amd64.deb'
+2024-09-25 16:56:47,114 - ssh - sshClient.py[line:49] - INFO - Execute "[ ! -d /home/swqa/Fallback/DEB_Fallback ] && mkdir -p /home/swqa/Fallback/DEB_Fallback"
+2024-09-25 16:56:47,117 - ssh - sshClient.py[line:52] - INFO - 
+2024-09-25 16:56:47,117 - ssh - sshClient.py[line:49] - INFO - Execute "wget --no-check-certificate  https://oss.mthreads.com/product-release/develop/20240924/musa_2024.09.24-D+750+dkms+glvnd-pc_amd64.deb -O /home/swqa/Fallback/DEB_Fallback/musa_2024.09.24-D+750+dkms+glvnd-pc_amd64.deb && echo 'True' ||echo 'False'"

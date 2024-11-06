@@ -99,9 +99,9 @@ class OSSTool:
 if __name__ == "__main__":
     o = OSSTool('mtoss', 'mtoss123')
     # print(o.ls('release-ci', '/gr-umd/release-kylin-desktop-v1.0/dkms-deb/'))
-    s =  o.ls('product-release', '/develop/20231103/')
+    s =  o.ls('product-release', '/develop/20240301/')
     print(f"{type(s)=}\n{s=}")
-    o.show_txt('product-release/develop/20240808/daily_build_pc.txt')
+    print(o.show_text('product-release/release-2.5.0/20240308/musa_2024.03.08-2.5.0+9793_info.txt'))
     # rs = o.download('/product-release/ddk_release/Kylin_integration/Kylin2209_integration_1.0.29/musa_1.0.29-kylin_version_info.txt')
     # rs = o.download('/product-release/develop/20230209/musa_2023.02.09-D2757Ubuntu_amd64-pstate.deb')
     # print(rs.decode())

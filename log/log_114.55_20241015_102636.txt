@@ -1,0 +1,16 @@
+2024-10-15 10:26:36,693 - ssh - sshClient.py[line:28] - INFO - Connect to 'swqa@192.168.114.55/22' PassWd: gfx123456
+2024-10-15 10:26:36,830 - ssh - sshClient.py[line:49] - INFO - Execute "cat /etc/lsb-release | head -n 1 | awk -F '='  '{print $2}'"
+2024-10-15 10:26:37,086 - ssh - sshClient.py[line:52] - INFO - Ubuntu
+2024-10-15 10:26:37,087 - ssh - sshClient.py[line:49] - INFO - Execute "dpkg --print-architecture"
+2024-10-15 10:26:37,135 - ssh - sshClient.py[line:52] - INFO - amd64
+2024-10-15 10:26:37,135 - ssh - sshClient.py[line:49] - INFO - Execute "uname -m"
+2024-10-15 10:26:37,183 - ssh - sshClient.py[line:52] - INFO - x86_64
+2024-10-15 10:26:37,183 - ssh - sshClient.py[line:49] - INFO - Execute "uname -r"
+2024-10-15 10:26:37,232 - ssh - sshClient.py[line:52] - INFO - 5.15.0-105-generic
+2024-10-15 10:26:37,233 - ssh - sshClient.py[line:49] - INFO - Execute "systemctl status display-manager.service|grep 'Main PID'  |grep -oP '\(\K[^)]+'"
+2024-10-15 10:26:37,304 - ssh - sshClient.py[line:52] - INFO - lightdm
+2024-10-15 10:26:37,305 - ssh - sshClient.py[line:49] - INFO - Execute "ps -ef |grep '/lib/systemd/systemd --user'|grep -v grep|awk -F' ' '{print $1}'|grep -vE 'lightdm|gdm'"
+2024-10-15 10:26:37,368 - ssh - sshClient.py[line:52] - INFO - swqa
+2024-10-15 10:26:41,252 - Fallback - get_driver_info.py[line:135] - INFO - 查找日期20231006-20231106：
+2024-10-15 10:26:57,560 - Fallback - get_driver_info.py[line:146] - INFO - 因oss地址下不存在文件移除 ['20231006', '20231009', '20231010', '20231011', '20231012', '20231013', '20231016', '20231017', '20231018', '20231019', '20231020', '20231023', '20231024', '20231025', '20231026', '20231027', '20231030', '20231031', '20231101', '20231102', '20231103', '20231106']
+2024-10-15 10:26:57,560 - Fallback - fallback_driver.py[line:113] - INFO - 'deb' 回退列表为：[]

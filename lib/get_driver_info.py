@@ -42,44 +42,6 @@ class deb_info:
         # print(work_date_list)
         return work_date_list
 
-    # 通过日期列表、daily_build获取 驱动版本列表
-    def get_deb_version_from_date(self):
-        result = []
-        remove_result = [] 
-        pc_list = []
-        daily_build_txts = ['daily_build_pc.txt', 'daily_build.txt']
-        # 先尝试获取daily_build_pc.txt，再尝试daily_build.txt
-        for work_date in self.work_date_list:
-            file_found = False
-            pc = None
-            driver = None
-            for daily_build_txt in daily_build_txts:
-                url = f'https://oss.mthreads.com/product-release/{self.branch}/{work_date}/{daily_build_txt}' 
-                try:
-                    response = requests.get(url)
-                    response.raise_for_status()  # 如果响应不是200，则会抛出异常
-                    driver = response.text.splitlines()[0]
-                    self.log.logger.info(f"成功获取文件：{daily_build_txt}")
-                    # 如果是pc的包，添加pc标签
-                    if daily_build_txt == 'daily_build_pc.txt':
-                        pc = 'pc'
-                    else:
-                        pc = 'os_type'
-                    file_found = True
-                    break  # 获取成功则退出循环
-                except requests.exceptions.RequestException as e:
-                    self.log.logger.error(f"未能获取文件：{daily_build_txt}，错误信息：{e}")
-            if pc:
-                pc_list.append(pc)
-            if driver is not None:
-                self.log.logger.info(f"{driver=}")
-                result.append(driver)
-            if not file_found:
-                remove_result.append(work_date)
-        if remove_result:
-            self.log.logger.info(f"因oss daily_build地址不存在移除 {remove_result}")
-        result = self.Check_Driver_URL('deb',result,pc_list)
-        return result,pc_list
 
     def daily_build_pc(self,work_date):
         if self.oss.ls('product-release',f'/{self.branch}/{work_date}/daily_build_pc.txt'):
@@ -93,8 +55,8 @@ class deb_info:
         else:
             return self.no_daily_build(work_date)
 
-
     def no_daily_build(self,work_date):
+        # print(work_date)
         build_ids = []
         files = []
         file_list = self.oss.ls('product-release',f'/{self.branch}/{work_date}/')
@@ -118,7 +80,8 @@ class deb_info:
                 else:
                     files = list(filter(lambda file:file.endswith(f'{self.os_type}_{self.architecture}.deb') and 'server' not in file,files))
             for file in files:
-                build_ids.append(file.split('+')[1])
+                build_ids.append(file.split('+')[1].split('-')[0])
+            # print(build_ids)
             if build_ids:
                 driver = list(filter(lambda file:max(build_ids,key=int) in file, files))
                 driver = '+'.join(driver[0].split('+')[:2])
@@ -179,7 +142,14 @@ class deb_info:
             self.log.logger.error(f"list index out of range! {start_end_list} not in {full_list}")
             sys.exit(-1)
 
-    def get_commit_from_info(self,deb_version):
+    @staticmethod
+    def url_encode(string):
+        # 使用 quote 方法进行 URL 编码
+        encoded_string = urllib.parse.quote(string, safe='')
+        return encoded_string
+
+    # deb_info commit信息，并转化为字典存储
+    def get_deb_info(self,deb_version):
         branch = self.branch
         deb_date = re.search(r'\d{4}\.\d{2}\.\d{2}',deb_version).group()
         deb_date = datetime.datetime.strptime(deb_date,"%Y.%m.%d").strftime("%Y%m%d")
@@ -194,25 +164,48 @@ class deb_info:
             value = commit.split(':')[1].lstrip()
             result[key] = value
         self.log.logger.info(f"{deb_date=}\ndeb_info={result}\t")
-        return result
-    
-    @staticmethod
-    def url_encode(string):
-        # 使用 quote 方法进行 URL 编码
-        encoded_string = urllib.parse.quote(string, safe='')
-        return encoded_string
+        return result    
 
-    # 通过deb_info.txt获取commit信息
-    def get_UMD_KMD_commit_from_deb_info(self,deb_list):
-        gr_umd_start_end = []
-        gr_kmd_start_end = []
+    # 通过deb_list获取UMD/KMD commit_List信息
+    def get_commit_from_debinfo(self,component,deb_list):
+        commitList = []
         for deb_version in deb_list:
-            rs = self.get_commit_from_info(deb_version)
-            umd_commit,kmd_commit = rs['umd'],rs['kmd']
-            gr_umd_start_end.append(umd_commit)
-            gr_kmd_start_end.append(kmd_commit)
-        self.log.logger.info(f"\n{gr_umd_start_end=}\n{gr_kmd_start_end=}")
-        return gr_umd_start_end,gr_kmd_start_end
+            rs = self.get_deb_info(deb_version)
+            commit = rs[component]
+            commitList.append(commit)
+        self.log.logger.info(f"\n{component} commit list ={commitList}")
+        return commitList
+
+    # 通过git获取commits列表
+    def get_commits_from_deb_list(self,component,deb_list):
+        # 包含两个commit,头尾的列表
+        component_commitList = self.get_commit_from_debinfo(component,deb_list) 
+        Git = GitCommitInfo()
+        Git.update()
+        Commit_list = self.Check_Driver_URL(component,Git.get_commits(f"gr-{component}",self.branch, component_commitList))
+        return Commit_list
+        # umd_search_list = self.Check_Driver_URL('umd',o.get_commits('gr-umd',self.branch, gr_umd_start_end))
+        # kmd_search_list = self.Check_Driver_URL('kmd',o.get_commits('gr-kmd',self.branch, gr_kmd_start_end))
+        # return umd_search_list,kmd_search_list
+
+    #从输入的commit，得到回退列表
+    def get_commits_from_commit(self,component,commit_list):
+        Git = GitCommitInfo()
+        Git.update()
+        Commit_list = self.Check_Driver_URL(component,Git.get_commits(f"gr-{component}",self.branch, commit_list))
+        return Commit_list
+
+    # # 通过deb_info.txt获取commit信息
+    # def get_UMD_KMD_commit_from_deb_info(self,deb_list):
+    #     gr_umd_start_end = []
+    #     gr_kmd_start_end = []
+    #     for deb_version in deb_list:
+    #         rs = self.get_deb_info(deb_version)
+    #         umd_commit,kmd_commit = rs['umd'],rs['kmd']
+    #         gr_umd_start_end.append(umd_commit)
+    #         gr_kmd_start_end.append(kmd_commit)
+    #     self.log.logger.info(f"\n{gr_umd_start_end=}\n{gr_kmd_start_end=}")
+    #     return gr_umd_start_end,gr_kmd_start_end
 
     # 通过repo_tag.txt获取commit信息
     def get_commit_from_repo_tag_txt(self,deb_version):
@@ -230,14 +223,7 @@ class deb_info:
             self.log.logger.error(f"An unexpected error occurred: \n{e}")
         return umd_commit,kmd_commit
 
-    # 通过git获取commits列表
-    def get_commit_from_deb(self,deb_list):
-        gr_umd_start_end,gr_kmd_start_end = self.get_UMD_KMD_commit_from_deb_info(deb_list)
-        o = GitCommitInfo()
-        o.update()
-        umd_search_list = self.Check_Driver_URL('umd',o.get_commits('gr-umd',self.branch, gr_umd_start_end))
-        kmd_search_list = self.Check_Driver_URL('kmd',o.get_commits('gr-kmd',self.branch, gr_kmd_start_end))
-        return umd_search_list,kmd_search_list
+
     
     # """
     # 通过deb日期 repo_tag获取commit信息
@@ -293,7 +279,46 @@ class deb_info:
         commits = [commit['short_id'] for commit in latest_commits.values()]
         return commits
 
-    # def get_commits_from_commit(self,component,commit_list):
+    # 通过日期列表、daily_build获取 驱动版本列表
+    def get_deb_version_from_date(self):
+        result = []
+        remove_result = [] 
+        pc_list = []
+        daily_build_txts = ['daily_build_pc.txt', 'daily_build.txt']
+        # 先尝试获取daily_build_pc.txt，再尝试daily_build.txt
+        for work_date in self.work_date_list:
+            file_found = False
+            pc = None
+            driver = None
+            for daily_build_txt in daily_build_txts:
+                url = f'https://oss.mthreads.com/product-release/{self.branch}/{work_date}/{daily_build_txt}' 
+                try:
+                    response = requests.get(url)
+                    response.raise_for_status()  # 如果响应不是200，则会抛出异常
+                    driver = response.text.splitlines()[0]
+                    self.log.logger.info(f"成功获取文件：{daily_build_txt}")
+                    # 如果是pc的包，添加pc标签
+                    if daily_build_txt == 'daily_build_pc.txt':
+                        pc = 'pc'
+                    else:
+                        pc = 'os_type'
+                    file_found = True
+                    break  # 获取成功则退出循环
+                except requests.exceptions.RequestException as e:
+                    self.log.logger.error(f"未能获取文件：{daily_build_txt}，错误信息：{e}")
+            if pc:
+                pc_list.append(pc)
+            if driver is not None:
+                self.log.logger.info(f"{driver=}")
+                result.append(driver)
+            if not file_found:
+                remove_result.append(work_date)
+        if remove_result:
+            self.log.logger.info(f"因oss daily_build地址不存在移除 {remove_result}")
+        result = self.Check_Driver_URL('deb',result,pc_list)
+        return result,pc_list
+
+        
     #     end_date = datetime.datetime.today() + datetime.timedelta(1)
     #     begin_date = end_date - datetime.timedelta(365)
     #     end_date = end_date.strftime("%Y-%m-%d %H:%M:%S")

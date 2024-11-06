@@ -116,15 +116,16 @@ class Fallback:
             if rs:
                 self.log.logger.info(f"deb回退结果为：\"{rs[-1]}\"引入")
                 # 获取umd、kmd info，后续可添加video、gmi
-                umd_list, kmd_list = deb_info_obj.get_commit_from_deb(rs)
                 component = 'umd'
+                umd_list = deb_info_obj.get_commits_from_deb_list(component,rs)
                 self.log.logger.info(f"{component} 回退列表为：{umd_list}")
                 rs = self.middle_search(component,umd_list)
                 if not rs: 
                     component = 'kmd'
+                    kmd_list = deb_info_obj.get_commits_from_deb_list(component,rs)
                     self.log.logger.info(f"{component} 回退列表为：{kmd_list}")
                     rs = self.middle_search(component,kmd_list)
-                self.log.logger.info(f"{component} 回退结果为：\"{rs[-1]}\"引入")
+                self.log.logger.info(f"{component} 回退结果为：\"{rs[-1]}\"引入")  
 
     def install_umd(self,commit):
         Pc = self.sshclient
@@ -297,10 +298,10 @@ class Fallback:
             display_var = Pc.execute(r"w -h  | awk '{print $3}'|grep -o '^:[0-9]\+' |head -n 1")[0]
             if not display_var:
                 display_var=':0'
-                rs = Pc.execute(f"export DISPLAY={display_var} ; xrandr 2>$1")[0]
+                rs = Pc.execute(f"export DISPLAY={display_var} ; xrandr 2>&1")[0]
                 if "Can't open display" in rs:
                     display_var=':1'
-                    rs = Pc.execute(f"export DISPLAY={display_var} ; xrandr 2>$1")[0]
+                    rs = Pc.execute(f"export DISPLAY={display_var} ; xrandr 2>&1")[0]
                     if "Can't open display" in rs:
                         print("xrandr failed to run with both :0 and :1")
                         return None

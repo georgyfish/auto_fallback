@@ -1,8 +1,6 @@
 {
-    "Test_Host_IP": "192.168.2.131",
-    "Host_name": "georgy",
-    "passwd": "123456",
-    "branch": "develop",
-    "begin_date" : "20240711",
-    "end_date" : "20240712"
+    "Test_Host_IP": "192.168.114.24",
+    "Host_name": "swqa",
+    "passwd": "gfx123456",
+    "branch": "develop"
 }

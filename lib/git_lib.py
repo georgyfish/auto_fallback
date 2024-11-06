@@ -23,10 +23,9 @@ class GitCommitInfo():
         result = []
         # path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..','app','db','code', repo)
         path = os.path.join('/var','www','data','testdata_viewer','app','db','code', repo)
-        # print(path)
         cmd = f"cd {path};git checkout {branch};git branch -u origin/{branch} {branch};git fetch"
         rs = subprocess.Popen(cmd, shell=True, close_fds=True, stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.PIPE, preexec_fn = os.setsid, encoding="utf-8")
-        rs.communicate(timeout=30)
+        rs.communicate()
         cmd = f"cd {path};git log origin/{branch} --oneline --date=format:'%Y-%m-%d %H:%M:%S' --pretty=format:'%H***%cd***%s***%ae'"
         rs = subprocess.Popen(cmd, shell=True, close_fds=True, stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.PIPE, preexec_fn = os.setsid, encoding="utf-8")
         for line in rs.stdout.readlines():
